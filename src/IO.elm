@@ -20,9 +20,8 @@ Basically *IO* is a monad enabing two kinds of effects :
 @docs IO
 
 # Runing an Elm application with *IO*
-This module port the four main way of running an Elm application to *IO*.
-@docs Program, beginnerProgram, beginnerVDomProgram, program, vDomProgram, beginnerProgramWithFlags,
- beginnerVDomProgramWithFlags, programWithFlags, vDomProgramWithFlags
+This module port the two main ways of running an Elm application to *IO*.
+@docs Program, beginnerVDomProgram, vDomProgram, beginnerVDomProgramWithFlags, vDomProgramWithFlags
 
 # Lifting values and commands into *IO*
 @docs pure, lift, liftM, liftUpdate
@@ -41,6 +40,10 @@ This module port the four main way of running an Elm application to *IO*.
 
 # Transform IO into regular Elm
 @docs transform, transformWithFlags
+
+# Runing an headless Elm application with *IO*
+This module port the four main ways of running an headless Elm application to *IO*.
+@docs beginnerProgram, program, beginnerProgramWithFlags, programWithFlags
 
 # Unsafe operations (You've been warned!)
 @docs batch, combine
