@@ -6,9 +6,10 @@ module IO exposing (
   {- State        -} get, set, modify,
   {- Optics       -} lens, select,
   {- Traversal    -} traverse, mapM,
+  {- Dummy        -} dummyUpdate, dummySub,
   Program,
-  {- Run no flags -} transform, program, vDomProgram,
-  {- Run    flags -} transformWithFlags, programWithFlags, vDomProgramWithFlags
+  {- Run no flags -} transform, beginnerProgram, beginnerVDomProgram, program, vDomProgram,
+  {- Run    flags -} transformWithFlags, beginnerProgramWithFlags, beginnerVDomProgramWithFlags, programWithFlags, vDomProgramWithFlags
  )
 
 {-|This module provides a monadic interface for *The Elm Architecture*.
@@ -20,10 +21,11 @@ Basically *IO* is a monad enabing two kinds of effects :
 
 # Runing an Elm application with *IO*
 This module port the four main way of running an Elm application to *IO*.
-@docs Program, program, vDomProgram, programWithFlags, vDomProgramWithFlags
+@docs Program, beginnerProgram, beginnerVDomProgram, program, vDomProgram, beginnerProgramWithFlags,
+ beginnerVDomProgramWithFlags, programWithFlags, vDomProgramWithFlags
 
 # Lifting values and commands into *IO*
-@docs pure, lift, liftM, liftUpdate, none
+@docs pure, lift, liftM, liftUpdate
 
 # The model as a state
 @docs get, set, modify
@@ -33,6 +35,9 @@ This module port the four main way of running an Elm application to *IO*.
 
 # Passing from a model to another
 @docs lens, select
+
+# Dummy values
+@docs none, dummyUpdate, dummySub
 
 # Transform IO into regular Elm
 @docs transform, transformWithFlags
@@ -256,6 +261,16 @@ traverse f l =
 mapM : List (IO model a) -> IO model (List a)
 mapM = traverse identity
 
+-- Dummy
+
+{-|Dummy update function.-}
+dummyUpdate : a -> IO b c
+dummyUpdate m = none
+
+{-|Dummy subscription function-}
+dummySub : a -> Sub b
+dummySub a = Sub.none
+
 -- Platform
 
 {-|Program using *IO*.-}
@@ -285,6 +300,20 @@ transform args =
            in update io0 model0
 
   in { args | init = init, update = update }
+
+{-|Port of *Platform.program* with *IO* with *dummyUpdate*.-}
+beginnerProgram : { init  : model,
+                    main  : IO model msg,
+                    subscriptions : model -> Sub (IO model msg)
+                  } -> Program Never model msg
+beginnerProgram args = program { init = (args.init, args.main), update = dummyUpdate, subscriptions = args.subscriptions }
+
+{-|Port of *VirtualDom.program* with *IO* with *dummyUpdate* (also works with *Html*).-}
+beginnerVDomProgram : { init  : model,
+                        view  : model -> Node (IO model msg),
+                        subscriptions : model -> Sub (IO model msg)
+                      } -> Program Never model msg
+beginnerVDomProgram args = vDomProgram { init = (args.init, none), update = dummyUpdate, subscriptions = args.subscriptions, view = args.view }
 
 {-|Port of *Platform.program* with *IO*.-}
 program : { init : (model, IO model msg),
@@ -316,6 +345,20 @@ transformWithFlags args =
 
   in { args | init = init, update = update }
 
+
+{-|Port of *Platform.programWithFlags* with *IO* with *dummyUpdate*.-}
+beginnerProgramWithFlags : { init  : flags -> model,
+                             main  : IO model msg,
+                             subscriptions : model -> Sub (IO model msg)
+                           } -> Program flags model msg
+beginnerProgramWithFlags args = programWithFlags { init = \flags -> (args.init flags, args.main), update = dummyUpdate, subscriptions = args.subscriptions }
+
+{-|Port of *VirtualDom.programWithFlags* with *IO* (also works with *Html*).-}
+beginnerVDomProgramWithFlags : { init : flags -> model,
+                                 view : model -> Node (IO model msg),
+                                 subscriptions : model -> Sub (IO model msg)
+                               } -> Program flags model msg
+beginnerVDomProgramWithFlags args = vDomProgramWithFlags { init = \flags -> (args.init flags, none), update = dummyUpdate, subscriptions = args.subscriptions, view = args.view }
 
 {-|Port of *Platform.programWithFlags* with *IO*.-}
 programWithFlags : { init : flags -> (model, IO model msg),

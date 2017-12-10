@@ -18,6 +18,6 @@ import CmdM exposing (..)
 (<*>) : CmdM (a -> b) -> CmdM a -> CmdM b
 (<*>) = CmdM.ap
 
-{-|Infix notation for *CmdM.combineù.-}
+{-|Infix notation for *CmdM.combine*.-}
 (<+>) : CmdM a -> CmdM a -> CmdM a
 (<+>) = CmdM.combine
