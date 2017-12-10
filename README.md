@@ -1,5 +1,7 @@
 # Elm-IO
 
+[Documentation](http://package.elm-lang.org/packages/chrilves/elm-io/latest)
+
 This projects provide pure Elm tools whose aim is to make programming in
 Elm more composable.
 
