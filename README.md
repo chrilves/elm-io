@@ -23,3 +23,45 @@ subscritptions can not only emmit messages but also *IO*s.
 sometimes (often?) it is cleaner and simpler to send as message an *IO*
 than polluting the model or encode complex scheduling logic in the message
 type while turning the update function into complex interpreter.
+
+## Example
+
+Here is a complete example of a simple page showing a counter
+
+```elm
+module Hello exposing (..)
+
+import Html exposing (..)
+import Html.Events exposing(..)
+import IO exposing (..)
+
+type alias Model  = Int 
+type alias Msg = ()
+
+increment : IO Model Msg
+increment = IO.modify ((+) 1)
+
+reset : IO Model Msg
+reset = IO.set 0
+
+view : Model -> Html (IO Model Msg) 
+view m = 
+  div [] [
+    h1 [] [
+      text "Example of an IO program"
+    ],
+    p [] [
+      text ("Counter = " ++ (toString m))
+    ],
+    button [onClick increment] [
+      text "increment"
+    ],
+    button [onClick reset] [
+      text "reset"
+    ]
+  ]
+
+main : IO.Program Never Model Msg 
+main =
+  IO.beginnerVDomProgram { init = 0, view = view , subscriptions = IO.dummySub }
+```
