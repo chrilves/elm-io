@@ -2,7 +2,7 @@ module IO exposing (
   IO,
   {- Monadic      -} pure, map, bind, join, ap, 
   {- Monoid       -} none, batch, combine, list,
-  {- Transformer  -} lift, liftM, liftUpdate,
+  {- Transformer  -} lift, liftUpdate,
   {- State        -} get, set, modify,
   {- Optics       -} lens, select,
   {- Traversal    -} traverse, mapM,
@@ -24,7 +24,7 @@ This module port the two main ways of running an Elm application to *IO*.
 @docs Program, beginnerVDomProgram, vDomProgram, beginnerVDomProgramWithFlags, vDomProgramWithFlags
 
 # Lifting values and commands into *IO*
-@docs pure, lift, liftM, liftUpdate
+@docs pure, lift, liftUpdate
 
 # The model as a state
 @docs get, set, modify
@@ -62,7 +62,7 @@ computation that can modify the model `model`,
 perform commands and contains values of type `a`.
 -}
 type IO model a = Pure a
-                | Impure (IOBase model (IO model a))
+                | Impure (Base model (IO model a))
 
 
 -- Utils
@@ -74,10 +74,10 @@ an effect for the elm runtime. So putting a value `a` into a *Cmd*
 makes no sense! *CmdP* (for *Cmd* + *Pure*) enable to store a pure
 value as an effect without passing in the elm runtime.
 -}
-type alias IOBase model a = model -> (model, List a, Cmd a)
+type alias Base model a = model -> (model, List a, Cmd a)
 
-ioBaseMap : (a -> b) -> IOBase model a -> IOBase model b
-ioBaseMap f m s = let (s2, l, cmd) = m s in (s2, List.map f l, Cmd.map f cmd)
+baseMap : (a -> b) -> Base model a -> Base model b
+baseMap f m s = let (s2, l, cmd) = m s in (s2, List.map f l, Cmd.map f cmd)
 
 -- Monadic
 
@@ -102,7 +102,7 @@ map : (a -> b) -> IO model a -> IO model b
 map f ioa =
   case ioa of
     Pure a   -> Pure (f a)
-    Impure m -> Impure (ioBaseMap (map f) m)
+    Impure m -> Impure (baseMap (map f) m)
 
 
 {-|Chains *IO*s.
@@ -122,7 +122,7 @@ bind : (a -> IO model b) -> IO model a -> IO model b
 bind f m =
   case m of
     Pure a   -> f a
-    Impure x -> Impure (ioBaseMap (bind f) x)
+    Impure x -> Impure (baseMap (bind f) x)
 
 {-|Flatten an *IO* containing an *IO* into a simple *IO*.
 
@@ -153,24 +153,19 @@ Use *mapM* instead!
 -}
 batch : List (IO model a) -> IO model a
 batch l =
-  let
-    reify : IO x b -> IOBase x (IO x b)
-    reify io =
-      case io of
-        Pure   b -> \s -> (s, [Pure b], Cmd.none)
-        Impure c -> c
-
-    accumulate : List (IOBase model b) -> List b -> Cmd b -> IOBase model b
-    accumulate ios l cmd model =
+  let 
+    accumulate : List (IO model b) -> List (List (IO model b)) -> Cmd (IO model b) -> Base model (IO model b)
+    accumulate ios lists cmd =
       case ios of
-        []       -> (model, l, cmd)
-        hd :: tl -> let (model2, l2, cmd2) = hd model
-                    in accumulate tl (l ++ l2) (Cmd.batch [cmd, cmd2]) model
-
+        []       -> \m -> (m, List.reverse lists |> List.concat, cmd)
+        hd :: tl -> case hd of
+                      Pure _   -> accumulate tl ([hd] :: lists) cmd
+                      Impure f -> \m -> let (m2, list2, cmd2) = f m
+                                        in accumulate tl (list2 :: lists) (Cmd.batch [cmd, cmd2]) m2
   in case l of
        []  -> none
        [x] -> x
-       _   -> Impure (accumulate (List.map reify l) [] Cmd.none)
+       _   -> Impure (accumulate l [] Cmd.none)
 
 {-|Combine two *IO*. Its use is strongly discouraged!
 Use *mapM instead!
@@ -183,10 +178,6 @@ combine x y = batch [x,y]
 {-|Lift a *Cmd* as an  *IO*.-}
 lift : Cmd a -> IO model a
 lift cmd = Impure (\s -> (s, [], Cmd.map Pure cmd))
-
-{-|Lift a *CmdM* as an *IO*.-}
-liftM : CmdM a -> IO model a
-liftM = CmdM.lazyFold Pure (\cmdiof -> Impure (\s -> (s, [], cmdiof ())))
 
 {-|Lift a classic update function into an *IO*.-}
 liftUpdate : (model -> (model, Cmd a)) -> IO model a

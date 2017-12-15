@@ -1,8 +1,7 @@
 module CmdM exposing (
   CmdM,
-  {- Catamorphism -} fold, lazyFold,
   {- Monadic      -} pure, map, bind, join, ap,
-  {- Monoid       -} none, batch, combine,
+  {- Monoid       -} none, batch, combine, list,
   {- Transformer  -} lift,
   {- Traversal    -} traverse, mapM,
   Program,
@@ -29,16 +28,11 @@ This module port the four main way of running an Elm application to *CmdM*.
 # Transform IO into regular Elm
 @docs transform, transformWithFlags
 
-# Folding
-If you need to convert *CmdM* to something else, this is the way.
-@docs fold, lazyFold
-
-# Unsafe operations (You've been warned!)
-@docs batch, combine
+# Batch operations
+@docs batch, combine, list
 -}
 
 import Platform.Cmd exposing (..)
-import Task exposing (..)
 import VirtualDom exposing (..)
 
 {-| Monadic interface for commands.
@@ -48,30 +42,30 @@ computation that can perform commands and
 contains values of type `msg`.
 -}
 type CmdM msg = Pure msg
-              | Impure (Cmd (CmdM msg))
+              | Impure (Base (CmdM msg))
 
+-- Utils
+type alias Base a = (List a, Cmd a)
+
+baseMap : (a -> b) -> Base a -> Base b
+baseMap f (l, cmd) = (List.map f l, Cmd.map f cmd)
+
+-- Monadic
 
 {-|Returns a *CmdM* whose only effect is containing the value given to *pure*.-}
 pure : a -> CmdM a
 pure a = Pure a
 
+{-|Send messages in batch-}
+list : List a -> CmdM a
+list l =
+  case l of
+    [x] -> Pure x
+    _   -> Impure (List.map Pure l, Cmd.none)
+
 {-| Transforms an Elm command into a monadic command *CmdM*.-}
 lift : Cmd a -> CmdM a
-lift cmd = Impure (Cmd.map Pure cmd)
-
-{-| Catamorphism for *CmdM*. Strict version.-}
-fold : (a -> r) -> (Cmd r -> r) -> CmdM a -> r
-fold p i cmdma  =
-  case cmdma of
-    Pure x -> p x
-    Impure cmd -> i (Cmd.map (fold p i) cmd)
-
-{-| Catamorphism for *CmdM*. Lazy version.-}
-lazyFold : (a -> r) -> ((() -> Cmd r) -> r) -> CmdM a -> r
-lazyFold p i cmdma  =
-  case cmdma of
-    Pure x -> p x
-    Impure cmd -> i (\_ -> Cmd.map (lazyFold p i) cmd)
+lift cmd = Impure ([] , Cmd.map Pure cmd)
 
 {-|Map a function over an *CmdM*.
 
@@ -80,10 +74,12 @@ lazyFold p i cmdma  =
 - ```map identity = identity```
 -}
 map : (a -> b) -> CmdM a -> CmdM b
-map f cmdm =
-  case cmdm of
-    Pure a   -> Pure (f a)
-    Impure m -> Impure (Cmd.map (map f) m)
+map f =
+  let aux cmdm =
+        case cmdm of
+          Pure a   -> Pure (f a)
+          Impure m -> Impure (baseMap aux m)
+  in aux
 
 {-|Chains *CmdM*s.
 
@@ -99,10 +95,12 @@ the function.
 - ```(bind f) >> (bind g) = bind (a -> bind g (f a))```
 -}
 bind : (a -> CmdM b) -> CmdM a -> CmdM b
-bind f m =
-  case m of
-    Pure a   -> f a
-    Impure x -> Impure (Cmd.map (bind f) x)
+bind f =
+  let aux m = 
+        case m of
+          Pure a   -> f a
+          Impure x -> Impure (baseMap aux x)
+  in aux
 
 {-|Flatten a *CmdM* containing a *CmdM* into a simple *CmdM*.
 
@@ -134,15 +132,17 @@ I strongly discourage you from using it. Use *mapM* instead.
 batch : List (CmdM a) -> CmdM a
 batch l =
   let
-    pureCmd : b -> Cmd b
-    pureCmd a = Task.perform identity (Task.succeed a)
-
-    reify : CmdM b -> Cmd (CmdM b)
-    reify cmd =
-      case cmd of
-        Pure b   -> pureCmd (Pure b)
-        Impure c -> c
-  in Impure (Cmd.batch (List.map reify l))
+    accumulate : List (CmdM b) -> List (List (CmdM b)) -> Cmd (CmdM b) -> CmdM b
+    accumulate l lists cmd =
+      case l of
+        []       -> Impure (List.reverse lists |> List.concat, cmd)
+        hd :: tl -> case hd of
+                      Pure _               -> accumulate tl ([hd]  :: lists) cmd
+                      Impure (list2, cmd2) -> accumulate tl (list2 :: lists) (Cmd.batch [cmd, cmd2])
+  in case l of
+       []  -> none
+       [x] -> x
+       _   -> accumulate l [] Cmd.none
 
 {-|Group commands in a batch. Its behavior may not be what you expect!
 I strongly discourage you from using it. Use *mapM* instead.
@@ -169,13 +169,17 @@ mapM = traverse identity
 type alias Program flags model msg = Platform.Program flags model (CmdM msg)
 
 -- The core of all the *CmdM* monad! It runs the *CmdM* monad using the update function.
-runUpdate : (msg -> model -> (model, CmdM msg)) -> (CmdM msg -> model -> (model, Cmd (CmdM msg)))
-runUpdate f cmdm0 model0 =
-  case cmdm0 of
-    Pure msg -> let (model1, cmdm1) = f msg model0
-                in runUpdate f cmdm1 model1
-    Impure x -> (model0, x)
-
+runUpdate : (msg -> model -> (model, CmdM msg)) -> CmdM msg -> model -> (model, Cmd (CmdM msg))
+runUpdate f cmdm =
+  let aux : List (CmdM msg) -> Cmd (CmdM msg) -> model -> (model, Cmd (CmdM msg))
+      aux l cmd m =
+        case l of
+          []       -> (m, cmd)
+          hd :: tl -> case hd of
+                        Pure msg             -> let (model2, cmdm2) = f msg m
+                                                in aux (cmdm2 :: tl) cmd model2
+                        Impure (list2, cmd2) -> aux (list2 ++ tl) (Cmd.batch [cmd, cmd2]) m
+  in aux [cmdm] Cmd.none
 
 {-|Transform a program using *IO* into a normal program.-}
 transform :   { y | init : (model,      CmdM msg),  update :      msg -> model -> (model,       CmdM msg ) }
