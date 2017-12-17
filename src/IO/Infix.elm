@@ -1,7 +1,7 @@
 module IO.Infix exposing (..)
 
 {-|Infix notation for *IO*
-@docs (<$>), (>>=), (<*>), (<+>)
+@docs (<$>), (>>=), (<*>), (<+>), (<!>)
 -}
 
 import IO exposing (..)
@@ -21,3 +21,8 @@ import IO exposing (..)
 {-|Infix notation for *IO.combine*.-}
 (<+>) : IO model a -> IO model a -> IO model a
 (<+>) = IO.combine
+
+{-|Infix notation for *IO.seq*.-}
+(<!>) : IO model a -> IO model b -> IO model b
+(<!>) = IO.seq
+

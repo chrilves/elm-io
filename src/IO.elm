@@ -1,6 +1,6 @@
 module IO exposing (
   IO,
-  {- Monadic      -} pure, map, bind, join, ap, 
+  {- Monadic      -} pure, map, bind, join, ap, seq,
   {- Monoid       -} none, batch, combine, list,
   {- Transformer  -} lift, liftM, liftUpdate,
   {- State        -} get, set, modify,
@@ -30,7 +30,7 @@ This module port the two main ways of running an Elm application to *IO*.
 @docs get, set, modify
 
 # Classic monadic operations
-@docs map, bind, join, ap, traverse, mapM
+@docs map, bind, join, ap, seq, traverse, mapM
 
 # Passing from a model to another
 @docs lens, select
@@ -130,6 +130,10 @@ It enable to easily lift functions to *IO*.
 -}
 ap : IO model (a -> b) -> IO model a -> IO model b
 ap mf ma = bind (flip  map ma) mf
+
+{-|Run the first argument, ignore the result, then run the second.-}
+seq : IO model a -> IO model b -> IO model b
+seq = map (\_ -> identity) >> ap
 
 -- Monoid
 

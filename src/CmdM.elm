@@ -1,6 +1,6 @@
 module CmdM exposing (
   CmdM,
-  {- Monadic      -} pure, map, bind, join, ap,
+  {- Monadic      -} pure, map, bind, join, ap, seq,
   {- Monoid       -} none, batch, combine, list,
   {- Transformer  -} lift,
   {- Traversal    -} traverse, mapM,
@@ -23,7 +23,7 @@ This module port the four main way of running an Elm application to *CmdM*.
 @docs pure, lift, none
 
 # Classic monadic operations
-@docs map, bind, join, ap, traverse, mapM
+@docs map, bind, join, ap, seq, traverse, mapM
 
 # Transform IO into regular Elm
 @docs transform, transformWithFlags
@@ -114,6 +114,10 @@ It enable to easily lift functions to *CmdM*.
 -}
 ap : CmdM (a -> b) -> CmdM a -> CmdM b
 ap mf ma = bind (flip  map ma) mf
+
+{-|Run the first argument, ignore the result, then run the second.-}
+seq : CmdM a -> CmdM b -> CmdM b
+seq = map (\_ -> identity) >> ap
 
 -- Monoid
 

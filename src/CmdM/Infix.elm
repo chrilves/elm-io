@@ -1,7 +1,7 @@
 module CmdM.Infix exposing (..)
 
 {-|Infix notation for `CmdM`
-@docs (<$>), (>>=), (<*>), (<+>)
+@docs (<$>), (>>=), (<*>), (<+>), (<!>)
 -}
 
 import CmdM exposing (..)
@@ -21,3 +21,7 @@ import CmdM exposing (..)
 {-|Infix notation for *CmdM.combine*.-}
 (<+>) : CmdM a -> CmdM a -> CmdM a
 (<+>) = CmdM.combine
+
+{-|Infix notation for *CmdM.seq*.-}
+(<!>) : CmdM a -> CmdM b -> CmdM b
+(<!>) = CmdM.seq
