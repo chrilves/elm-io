@@ -34,6 +34,7 @@ This module port the four main way of running an Elm application to *CmdM*.
 
 import Platform.Cmd exposing (..)
 import VirtualDom exposing (..)
+import CmdM.Internal exposing (..)
 
 {-| Monadic interface for commands.
 
@@ -41,14 +42,8 @@ A value of type `CmdM msg` is an effectful
 computation that can perform commands and
 contains values of type `msg`.
 -}
-type CmdM msg = Pure msg
-              | Impure (Base (CmdM msg))
 
--- Utils
-type alias Base a = (List a, Cmd a)
-
-baseMap : (a -> b) -> Base a -> Base b
-baseMap f (l, cmd) = (List.map f l, Cmd.map f cmd)
+type alias CmdM msg = CmdM.Internal.CmdM msg
 
 -- Monadic
 
@@ -63,7 +58,7 @@ list l =
     [x] -> Pure x
     _   -> Impure (List.map Pure l, Cmd.none)
 
-{-| Transforms an Elm command into a monadic command *CmdM*.-}
+{-|Transforms an Elm command into a monadic command *CmdM*.-}
 lift : Cmd a -> CmdM a
 lift cmd = Impure ([] , Cmd.map Pure cmd)
 

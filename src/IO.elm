@@ -2,7 +2,7 @@ module IO exposing (
   IO,
   {- Monadic      -} pure, map, bind, join, ap, 
   {- Monoid       -} none, batch, combine, list,
-  {- Transformer  -} lift, liftUpdate,
+  {- Transformer  -} lift, liftM, liftUpdate,
   {- State        -} get, set, modify,
   {- Optics       -} lens, select,
   {- Traversal    -} traverse, mapM,
@@ -24,7 +24,7 @@ This module port the two main ways of running an Elm application to *IO*.
 @docs Program, beginnerVDomProgram, vDomProgram, beginnerVDomProgramWithFlags, vDomProgramWithFlags
 
 # Lifting values and commands into *IO*
-@docs pure, lift, liftUpdate
+@docs pure, lift, liftM, liftUpdate
 
 # The model as a state
 @docs get, set, modify
@@ -54,6 +54,7 @@ import Lens exposing (..)
 import Select exposing (..)
 import VirtualDom exposing (..)
 import CmdM exposing (..)
+import CmdM.Internal
 
 {-|Monadic interface for *The Elm Architecture*.
 
@@ -63,7 +64,6 @@ perform commands and contains values of type `a`.
 -}
 type IO model a = Pure a
                 | Impure (Base model (IO model a))
-
 
 -- Utils
 
@@ -99,11 +99,12 @@ list l =
 - ```map identity = identity```
 -}
 map : (a -> b) -> IO model a -> IO model b
-map f ioa =
-  case ioa of
-    Pure a   -> Pure (f a)
-    Impure m -> Impure (baseMap (map f) m)
-
+map f =
+  let aux ioa =
+        case ioa of
+          Pure a   -> Pure (f a)
+          Impure m -> Impure (baseMap aux m)
+  in aux
 
 {-|Chains *IO*s.
 
@@ -119,10 +120,12 @@ the function.
 - ```(bind f) >> (bind g) = bind (a -> bind g (f a))```
 -}
 bind : (a -> IO model b) -> IO model a -> IO model b
-bind f m =
-  case m of
-    Pure a   -> f a
-    Impure x -> Impure (baseMap (bind f) x)
+bind f =
+  let aux m =
+        case m of
+          Pure a   -> f a
+          Impure x -> Impure (baseMap aux x)
+  in aux
 
 {-|Flatten an *IO* containing an *IO* into a simple *IO*.
 
@@ -179,6 +182,13 @@ combine x y = batch [x,y]
 lift : Cmd a -> IO model a
 lift cmd = Impure (\s -> (s, [], Cmd.map Pure cmd))
 
+{-|Lift a *CmdM* into an *IO*-}
+liftM : CmdM a -> IO model a
+liftM cmdm =
+  case cmdm of
+    CmdM.Internal.Pure a          -> Pure a
+    CmdM.Internal.Impure (l, cmd) -> Impure (\s -> (s, List.map liftM l, Cmd.map liftM cmd))
+
 {-|Lift a classic update function into an *IO*.-}
 liftUpdate : (model -> (model, Cmd a)) -> IO model a
 liftUpdate f = Impure (\m -> let (m2, cmd) = f m
@@ -212,37 +222,41 @@ You can then define your *IO* on the minimal model and
 lift them to you real application's model when needed.
 -}
 lens : Lens a b -> IO a msg -> IO b msg
-lens l iob =
-  case iob of
-    Pure msg -> Pure msg
-    Impure x -> Impure (\a -> let (b, context) = l a
-                                  (b2, list, cmd)   = x b
-                                  f = lens l
-                              in (context b2, List.map f list, Cmd.map f cmd)
-                       )
+lens l =
+  let aux iob =
+        case iob of
+          Pure msg -> Pure msg
+          Impure x -> Impure (\a -> let (b, context) = l a
+                                        (b2, list, cmd)   = x b
+                                    in (context b2, List.map aux list, Cmd.map aux cmd)
+                            )
+  in aux
 
 {-|Congruence by a *Select* on an *IO*.
 Just like lenses but with *Select*.
 -}
 select : Select a b -> IO a msg -> IO b msg
-select l ioa =
-  case ioa of
-    Pure msg -> Pure msg
-    Impure x -> Impure (\b -> case l b of
-                                Nothing           -> (b, [], Cmd.none)
-                                Just (a, context) -> let (a2, list, ioa) = x a
-                                                         f = select l
-                                                     in (context a2, List.map f list, Cmd.map f ioa)
-                       )
+select l =
+  let aux ioa =
+        case ioa of
+          Pure msg -> Pure msg
+          Impure x -> Impure (\b -> case l b of
+                                      Nothing           -> (b, [], Cmd.none)
+                                      Just (a, context) -> let (a2, list, ioa) = x a
+                                                          in (context a2, List.map aux list, Cmd.map aux ioa)
+                            )
+  in aux
 
 {-|You can think of traverse like a *map* but with effects.
 It maps a function performing *IO* effects over a list.
 -}
 traverse : (a -> IO model b) -> List a -> IO model (List b)
-traverse f l =
-  case l of
-    []       -> pure []
-    hd :: tl -> ap (ap (pure (::)) (f hd)) (traverse f tl)
+traverse f =
+ let aux l =
+      case l of
+        []       -> pure []
+        hd :: tl -> ap (ap (pure (::)) (f hd)) (aux tl)
+  in aux
 
 {-|Transform a list of `IO` into an `IO` of list.-}
 mapM : List (IO model a) -> IO model (List a)
