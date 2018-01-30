@@ -11,24 +11,26 @@ module CmdM exposing (
 
 {-|This module provides a monadic interface for commands.
 
-Basically `CmdM` is like `Cmd` but is a monad, which means
+Basically [CmdM](#CmdM) is like `Cmd` but is a monad, which means
 you can chain effects as you like!
 @docs CmdM
 
-# Runing an Elm application with *CmdM*
-This module port the four main way of running an Elm application to *CmdM*.
+# Runing an Elm application with [CmdM](#CmdM)
+This module port the four main way of running an Elm application to [CmdM](#CmdM).
 @docs Program, program, vDomProgram, programWithFlags, vDomProgramWithFlags
 
-# Lifting values and commands into *CmdM*
+# Lifting values and commands into [CmdM](#CmdM)
 @docs pure, lift, none
 
 # Classic monadic operations
 @docs map, bind, join, ap, seq, traverse, mapM
 
-# Transform IO into regular Elm
+# Transform CmdM into regular Elm
 @docs transform, transformWithFlags
 
 # Batch operations
+Beware that batch operations might not do what you think. The execution order of
+messages and commands is **not defined**.
 @docs batch, combine, list
 -}
 
@@ -47,7 +49,7 @@ type alias CmdM msg = CmdM.Internal.CmdM msg
 
 -- Monadic
 
-{-|Returns a *CmdM* whose only effect is containing the value given to *pure*.-}
+{-|Returns a [CmdM](#CmdM) whose only effect is containing the value given to [pure](#pure).-}
 pure : a -> CmdM a
 pure a = Pure a
 
@@ -58,11 +60,11 @@ list l =
     [x] -> Pure x
     _   -> Impure (List.map Pure l, Cmd.none)
 
-{-|Transforms an Elm command into a monadic command *CmdM*.-}
+{-|Transforms an Elm command into a monadic command [CmdM](#CmdM).-}
 lift : Cmd a -> CmdM a
 lift cmd = Impure ([] , Cmd.map Pure cmd)
 
-{-|Map a function over an *CmdM*.
+{-|Map a function over an [CmdM](#CmdM).
 
 **Laws**
 - ```map (f >> g) = (map f) >> (map g)```
@@ -76,12 +78,12 @@ map f =
           Impure m -> Impure (baseMap aux m)
   in aux
 
-{-|Chains *CmdM*s.
+{-|Chains [CmdM](#CmdM)s.
 
 If you have a `CmdM a` and a function which given
 a `a` can give you a `CmdM b` depending on the value
 of type `a` given to the function. Then `bind` gives you
-a `CmdM b` that will run the first `CmdM` and then apply
+a `CmdM b` that will run the first [CmdM](#CmdM) and then apply
 the function.
 
 **Laws**
@@ -97,7 +99,7 @@ bind f =
           Impure x -> Impure (baseMap aux x)
   in aux
 
-{-|Flatten a *CmdM* containing a *CmdM* into a simple *CmdM*.
+{-|Flatten a [CmdM](#CmdM) containing a [CmdM](#CmdM) into a simple [CmdM](#CmdM).
 
 **Laws**
 - ```join (pure m) = m```
@@ -105,8 +107,8 @@ bind f =
 join : CmdM (CmdM a) -> CmdM a
 join = bind identity
 
-{-|Transform a *CmdM* containing functions into functions on *CmdM*.
-It enable to easily lift functions to *CmdM*.
+{-|Transform a [CmdM](#CmdM) containing functions into functions on [CmdM](#CmdM).
+It enable to easily lift functions to [CmdM](#CmdM).
 
 **Laws**
 - ```ap (pure identity) = identity```
@@ -121,12 +123,13 @@ seq = map (\_ -> identity) >> ap
 
 -- Monoid
 
-{-|A *CmdM* doing nothing (an containing no values!).-}
+{-|A [CmdM](#CmdM) doing nothing (an containing no values!).-}
 none : CmdM a
 none = lift Cmd.none
 
-{-|Group commands in a batch. Its behavior may not be what you expect!
-I strongly discourage you from using it. Use *mapM* instead.
+{-|
+**I strongly discourage you from using it. Use [mapM](#mapM) instead.**
+Group commands in a batch. Its behavior may not be what you expect!
 -}
 batch : List (CmdM a) -> CmdM a
 batch l =
@@ -143,14 +146,15 @@ batch l =
        [x] -> x
        _   -> accumulate l [] Cmd.none
 
-{-|Group commands in a batch. Its behavior may not be what you expect!
-I strongly discourage you from using it. Use *mapM* instead.
+{-|
+**I strongly discourage you from using it. Use [mapM](#mapM) instead.**
+Group commands in a batch. Its behavior may not be what you expect!
 -}
 combine : CmdM a -> CmdM a -> CmdM a
 combine x y = batch [x,y]
 
-{-|You can think of traverse like a *map* but with effects.
-It maps a function performing `CmdM` effects over a list.
+{-|You can think of traverse like a [map](#map) but with effects.
+It maps a function performing [CmdM](#CmdM) effects over a list.
 -}
 traverse : (a -> CmdM b) -> List a -> CmdM (List b)
 traverse f l =
@@ -158,16 +162,16 @@ traverse f l =
     []       -> pure []
     hd :: tl -> ap (ap (pure (::)) (f hd)) (traverse f tl)
 
-{-|Transform a list of *CmdM* into an *CmdM* of list.-}
+{-|Transform a list of [CmdM](#CmdM) into an [CmdM](#CmdM) of list.-}
 mapM : List (CmdM a) -> CmdM (List a)
 mapM = traverse identity
 
 -- Platform
 
-{-|Program using *IO*.-}
+{-|Program using [CmdM](#CmdM).-}
 type alias Program flags model msg = Platform.Program flags model (CmdM msg)
 
--- The core of all the *CmdM* monad! It runs the *CmdM* monad using the update function.
+-- The core of all the [CmdM](#CmdM) monad! It runs the [CmdM](#CmdM) monad using the update function.
 runUpdate : (msg -> model -> (model, CmdM msg)) -> CmdM msg -> model -> (model, Cmd (CmdM msg))
 runUpdate f cmdm =
   let aux : List (CmdM msg) -> Cmd (CmdM msg) -> model -> (model, Cmd (CmdM msg))
@@ -180,7 +184,7 @@ runUpdate f cmdm =
                         Impure (list2, cmd2) -> aux (list2 ++ tl) (Cmd.batch [cmd, cmd2]) m
   in aux [cmdm] Cmd.none
 
-{-|Transform a program using *IO* into a normal program.-}
+{-|Transform a program using [CmdM](#CmdM) into a normal program.-}
 transform :   { y | init : (model,      CmdM msg),  update :      msg -> model -> (model,       CmdM msg ) }
            -> { y | init : (model, Cmd (CmdM msg)), update : CmdM msg -> model -> (model , Cmd (CmdM msg)) }
 transform args =
@@ -194,14 +198,14 @@ transform args =
 
   in { args | init = init, update = update }
 
-{-|Port of *Platform*.program with *IO*.-}
+{-|Port of *Platform*.program with [CmdM](#CmdM).-}
 program : { init : (model, CmdM msg),
             update : msg -> model -> (model, CmdM msg),
             subscriptions : model -> Sub (CmdM msg)
           } -> Program Never model msg
 program = transform >> Platform.program
 
-{-|Port of *VirtualDom*.program with *CmdM* (also works with *HTML*).-}
+{-|Port of *VirtualDom*.program with [CmdM](#CmdM) (also works with *HTML*).-}
 vDomProgram : { init : (model, CmdM msg),
                 update : msg -> model -> (model , CmdM msg),
                 subscriptions : model -> Sub (CmdM msg),
@@ -210,7 +214,7 @@ vDomProgram : { init : (model, CmdM msg),
 vDomProgram = transform >> VirtualDom.program
 
 
-{-|Transform a program using *CmdM* into a normal program.-}
+{-|Transform a program using [CmdM](#CmdM) into a normal program.-}
 transformWithFlags :   { y | init : flags -> (model, CmdM msg), update : msg -> model -> (model, CmdM msg) }
                     -> { y | init : flags -> (model, Cmd (CmdM msg)), update : CmdM msg -> model -> (model, Cmd (CmdM msg))}
 transformWithFlags args =
@@ -225,14 +229,14 @@ transformWithFlags args =
   in { args | init = init, update = update }
 
 
-{-|Port of *Platform.programWithFlags* with *CmdM*.-}
+{-|Port of *Platform.programWithFlags* with [CmdM](#CmdM).-}
 programWithFlags : { init : flags -> (model, CmdM msg),
                      update : msg -> model -> (model, CmdM msg),
                      subscriptions : model -> Sub (CmdM msg)
                    } -> Program flags model msg
 programWithFlags = transformWithFlags >> Platform.programWithFlags
 
-{-|Port of *VirtualDom.programWithFlags* with *CmdM* (also works with *Html*).-}
+{-|Port of *VirtualDom.programWithFlags* with [CmdM](#CmdM) (also works with *Html*).-}
 vDomProgramWithFlags : { init : flags -> (model, CmdM msg),
                          update : msg -> model -> (model , CmdM msg),
                          subscriptions : model -> Sub (CmdM msg),
