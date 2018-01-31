@@ -82,3 +82,12 @@ main : IO.Program Never Model Msg
 main =
   IO.beginnerVDomProgram { init = 0, view = view , subscriptions = IO.dummySub }
 ```
+
+## Examples from http://elm-lang.org/examples translated into [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM) and [IO](http://package.elm-lang.org/packages/chrilves/elm-io/latest/IO)
+
+The [examples](https://github.com/chrilves/elm-io/tree/master/examples) folder contains examples from http://elm-lang.org/examples converted into [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM)
+and [IO](http://package.elm-lang.org/packages/chrilves/elm-io/latest/IO) ways. Please read the [README.md](https://github.com/chrilves/elm-io/tree/master/examples/README.md) file in this folder for more details on examples.
+
+## Need help?
+
+If you have questions and/or remarks, contact me on twitter at [@chrilves](https://twitter.com/chrilves)

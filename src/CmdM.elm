@@ -1,6 +1,6 @@
 module CmdM exposing (
   CmdM,
-  {- Monadic      -} pure, map, bind, join, ap, seq,
+  {- Monadic      -} pure, map, andThen, join, ap, seq,
   {- Monoid       -} none, batch, combine, list,
   {- Transformer  -} lift,
   {- Traversal    -} traverse, mapM,
@@ -23,7 +23,7 @@ This module port the four main way of running an Elm application to [CmdM](#CmdM
 @docs pure, lift, none
 
 # Classic monadic operations
-@docs map, bind, join, ap, seq, traverse, mapM
+@docs map, andThen, join, ap, seq, traverse, mapM
 
 # Transform CmdM into regular Elm
 @docs transform, transformWithFlags
@@ -82,17 +82,17 @@ map f =
 
 If you have a `CmdM a` and a function which given
 a `a` can give you a `CmdM b` depending on the value
-of type `a` given to the function. Then `bind` gives you
+of type `a` given to the function. Then [andThen](#andThen) gives you
 a `CmdM b` that will run the first [CmdM](#CmdM) and then apply
 the function.
 
 **Laws**
-- ```bind pure = identity```
-- ```bind (f >> pure) = map f```
-- ```(bind f) >> (bind g) = bind (a -> bind g (f a))```
+- ```andThen pure = identity```
+- ```andThen (f >> pure) = map f```
+- ```(andThen f) >> (andThen g) = andThen (a -> andThen g (f a))```
 -}
-bind : (a -> CmdM b) -> CmdM a -> CmdM b
-bind f =
+andThen : (a -> CmdM b) -> CmdM a -> CmdM b
+andThen f =
   let aux m = 
         case m of
           Pure a   -> f a
@@ -105,7 +105,7 @@ bind f =
 - ```join (pure m) = m```
 -}
 join : CmdM (CmdM a) -> CmdM a
-join = bind identity
+join = andThen identity
 
 {-|Transform a [CmdM](#CmdM) containing functions into functions on [CmdM](#CmdM).
 It enable to easily lift functions to [CmdM](#CmdM).
@@ -115,7 +115,7 @@ It enable to easily lift functions to [CmdM](#CmdM).
 - ```ap (pure (f >> g)) = ap (pure f) >> ap (pure g)```
 -}
 ap : CmdM (a -> b) -> CmdM a -> CmdM b
-ap mf ma = bind (flip  map ma) mf
+ap mf ma = andThen (flip  map ma) mf
 
 {-|Run the first argument, ignore the result, then run the second.-}
 seq : CmdM a -> CmdM b -> CmdM b

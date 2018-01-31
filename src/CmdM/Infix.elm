@@ -10,9 +10,9 @@ import CmdM exposing (..)
 (<$>) : CmdM a -> (a -> b) -> CmdM b
 (<$>) m f = CmdM.map f m
 
-{-|Infix notation for [CmdM.bind](../CmdM#bind).-}
+{-|Infix notation for [CmdM.andThen](../CmdM#andThen).-}
 (>>=) : CmdM a -> (a -> CmdM b) -> CmdM b
-(>>=) m f = CmdM.bind f m
+(>>=) m f = CmdM.andThen f m
 
 {-|Infix notation for [CmdM.ap](../CmdM#ap).-}
 (<*>) : CmdM (a -> b) -> CmdM a -> CmdM b

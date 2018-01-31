@@ -1,6 +1,6 @@
 module IO exposing (
   IO,
-  {- Monadic      -} pure, map, bind, join, ap, seq,
+  {- Monadic      -} pure, map, andThen, join, ap, seq,
   {- Monoid       -} none, batch, combine, list,
   {- Transformer  -} lift, liftM, liftUpdate,
   {- State        -} get, set, modify,
@@ -33,7 +33,7 @@ This module port the two main ways of running an Elm application to [IO](#IO).
 @docs get, set, modify
 
 # Classic monadic operations
-@docs map, bind, join, ap, seq, traverse, mapM
+@docs map, andThen, join, ap, seq, traverse, mapM
 
 # Passing from a model to another
 @docs lens, select
@@ -101,17 +101,17 @@ map f =
 
 If you have an *IO model a* and a function which given
 a *a* can give you an *IO model b* depending on the value
-of type *a* given to the function. Then *bind* gives you
+of type *a* given to the function. Then [andThen](#andThen) gives you
 an *IO model b* that will run the first [IO](#IO) and then apply
 the function.
 
 **Laws**
-- ```bind pure = identity```
-- ```bind (f >> pure) = map f```
-- ```(bind f) >> (bind g) = bind (a -> bind g (f a))```
+- ```andThen pure = identity```
+- ```andThen (f >> pure) = map f```
+- ```(andThen f) >> (andThen g) = andThen (a -> andThen g (f a))```
 -}
-bind : (a -> IO model b) -> IO model a -> IO model b
-bind f =
+andThen : (a -> IO model b) -> IO model a -> IO model b
+andThen f =
   let aux m =
         case m of
           Pure a   -> f a
@@ -124,7 +124,7 @@ bind f =
 - ```join (pure m) = m```
 -}
 join : IO model (IO model a) -> IO model a
-join = bind identity
+join = andThen identity
 
 {-|Transform an [IO](#IO) containing functions into functions on [IO](#IO)
 It enable to easily lift functions to [IO](#IO).
@@ -134,7 +134,7 @@ It enable to easily lift functions to [IO](#IO).
 - ```ap (pure (f >> g)) = ap (pure f) >> ap (pure g)```
 -}
 ap : IO model (a -> b) -> IO model a -> IO model b
-ap mf ma = bind (flip  map ma) mf
+ap mf ma = andThen (flip  map ma) mf
 
 {-|Run the first argument, ignore the result, then run the second.-}
 seq : IO model a -> IO model b -> IO model b

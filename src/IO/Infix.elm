@@ -10,9 +10,9 @@ import IO exposing (..)
 (<$>) : IO model a -> (a -> b) -> IO model b
 (<$>) m f = IO.map f m
 
-{-|Infix notation for [IO.bind](../IO#bind).-}
+{-|Infix notation for [IO.andThen](../IO#andThen).-}
 (>>=) : IO model a -> (a -> IO model b) -> IO model b
-(>>=) m f = IO.bind f m
+(>>=) m f = IO.andThen f m
 
 {-|Infix notation for [IO.ap](../IO#ap).-}
 (<*>) : IO model (a -> b) -> IO model a -> IO model b
