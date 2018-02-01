@@ -1,4 +1,8 @@
-module ExampleButtons exposing (..)
+module TEA.Buttons exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/user_input/buttons.html
@@ -6,7 +10,8 @@ module ExampleButtons exposing (..)
 import Html exposing (beginnerProgram, div, button, text)
 import Html.Events exposing (onClick)
 
-
+{-|-}
+main: Program Never Int Msg
 main =
   beginnerProgram { model = 0, view = view, update = update }
 

@@ -1,4 +1,8 @@
-module ExampleField exposing (..)
+module TEA.Field exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read all about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/user_input/text_fields.html
@@ -8,7 +12,8 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onInput)
 import String
 
-
+{-|-}
+main: Program Never String Msg
 main =
   beginnerProgram { model = "", view = view, update = update }
 

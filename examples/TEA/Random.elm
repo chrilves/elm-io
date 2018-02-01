@@ -1,4 +1,8 @@
-module ExampleRandom exposing (..)
+module TEA.Random exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/effects/random.html
@@ -8,7 +12,8 @@ import Html.Events exposing (..)
 import Random
 
 
-
+{-|-}
+main: Program Never Model Msg
 main =
   Html.program
     { init = init

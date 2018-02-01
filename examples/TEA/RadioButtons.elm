@@ -1,4 +1,8 @@
-module ExampleRadioButtons exposing (..)
+module TEA.RadioButtons exposing (main)
+
+{-|
+@docs main
+-}
 
 import Html exposing (Html, Attribute, div, fieldset, input, label, text)
 import Html.Attributes exposing (name, style, type_)
@@ -6,7 +10,8 @@ import Html.Events exposing (onClick)
 import Markdown
 
 
-
+{-|-}
+main: Program Never Model Msg
 main =
   Html.beginnerProgram { model = chapter1, update = update, view = view }
 

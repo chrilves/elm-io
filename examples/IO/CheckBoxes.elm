@@ -1,4 +1,8 @@
-module ExampleCheckBoxes exposing (..)
+module IO.CheckBoxes exposing (main)
+
+{-|
+@docs main
+-}
 
 import Html exposing (Html, beginnerProgram, fieldset, input, label, text)
 import Html.Attributes exposing (style, type_)
@@ -6,6 +10,8 @@ import Html.Events exposing (onClick)
 
 import IO exposing (..)
 
+{-|-}
+main: IO.Program Never Model Msg
 main =
   IO.beginnerVDomProgram { init = optOut, view = view, subscriptions = IO.dummySub }
 

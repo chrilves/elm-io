@@ -1,4 +1,9 @@
-module ExampleForm exposing (..)
+module TEA.Form exposing (main)
+
+{-|
+@docs main
+-}
+
 -- Read all about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/user_input/forms.html
 
@@ -6,7 +11,8 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onInput)
 
-
+{-|-}
+main: Program Never Model Msg
 main =
   Html.beginnerProgram
     { model = model

@@ -1,4 +1,8 @@
-module ExampleButtons exposing (..)
+module IO.Buttons exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/user_input/buttons.html
@@ -14,6 +18,7 @@ type alias Model = Int
 -- So we use unit at our dummy message type
 type alias Msg   = ()
 
+{-|-}
 main : IO.Program Never Model Msg
 main =
   IO.beginnerVDomProgram { init = 0, view = view, subscriptions = IO.dummySub }

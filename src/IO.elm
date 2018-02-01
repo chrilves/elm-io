@@ -4,7 +4,7 @@ module IO exposing (
   {- Monoid       -} none, batch, combine, list,
   {- Transformer  -} lift, liftM, liftUpdate,
   {- State        -} get, set, modify,
-  {- Optics       -} lens, select,
+  {- Optics       -} lens, optional,
   {- Traversal    -} traverse, mapM,
   {- Dummy        -} dummyUpdate, dummySub,
   Program,
@@ -22,9 +22,15 @@ Basically [IO](#IO) is a monad enabing two kinds of effects :
 
 @docs IO
 
-# Runing an Elm application with [IO](#IO)
+# Runing a web application with [IO](#IO)
 This module port the two main ways of running an Elm application to [IO](#IO).
-@docs Program, beginnerVDomProgram, vDomProgram, beginnerVDomProgramWithFlags, vDomProgramWithFlags
+@docs Program
+
+## Web applications
+@docs beginnerVDomProgram, vDomProgram, beginnerVDomProgramWithFlags, vDomProgramWithFlags
+
+## Headless applications
+@docs beginnerProgram, program, beginnerProgramWithFlags, programWithFlags
 
 # Lifting values and commands into [IO](#IO)
 @docs pure, lift, liftM, liftUpdate
@@ -36,17 +42,13 @@ This module port the two main ways of running an Elm application to [IO](#IO).
 @docs map, andThen, join, ap, seq, traverse, mapM
 
 # Passing from a model to another
-@docs lens, select
+@docs lens, optional
 
 # Dummy values
 @docs none, dummyUpdate, dummySub
 
 # Transform IO into regular Elm
 @docs transform, transformWithFlags
-
-# Runing an headless Elm application with [IO](#IO)
-This module port the four main ways of running an headless Elm application to [IO](#IO).
-@docs beginnerProgram, program, beginnerProgramWithFlags, programWithFlags
 
 # Batch operations
 Beware that batch operations might not do what you think. The execution order of
@@ -55,8 +57,8 @@ messages and commands is **not defined**.
 -}
 
 import Platform.Cmd exposing (..)
-import Lens exposing (..)
-import Select exposing (..)
+import Monocle.Lens exposing (..)
+import Monocle.Optional exposing (..)
 import VirtualDom exposing (..)
 import CmdM exposing (..)
 import CmdM.Internal
@@ -208,7 +210,7 @@ modify f = Impure (\s -> (f s, [Pure ()], Cmd.none))
 
 -- Optics
 
-{-|Congruence by a [Lens](../Lens) on an [IO](#IO).
+{-|Congruence by a [Lens](package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Lens) on an [IO](#IO).
 
 It would be silly to force users to redefine every [IO](#IO)
 for each application model. Lenses enable to lift an [IO](#IO)
@@ -218,29 +220,28 @@ model *b*.
 You can then define your [IO](#IO) on the minimal model and
 lift them to you real application's model when needed.
 -}
-lens : Lens a b -> IO a msg -> IO b msg
-lens l =
+lens : Lens b a -> IO a msg -> IO b msg
+lens {get, set} =
   let aux iob =
         case iob of
           Pure msg -> Pure msg
-          Impure x -> Impure (\a -> let (b, context) = l a
-                                        (b2, list, cmd)   = x b
-                                    in (context b2, List.map aux list, Cmd.map aux cmd)
-                            )
+          Impure x -> Impure (\b -> let (a, list, cmd)   = x (get b)
+                                    in (set a b, List.map aux list, Cmd.map aux cmd)
+                             )
   in aux
 
-{-|Congruence by a [Select](../Select) on an [IO](#IO).
-Just like lenses but with [Select](../Select).
+{-|Congruence by a [Optional](package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional) on an [IO](#IO).
+Just like lenses but with [Optional](package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional).
 -}
-select : Select a b -> IO a msg -> IO b msg
-select l =
+optional : Optional b a -> IO a msg -> IO b msg
+optional {getOption, set} =
   let aux ioa =
         case ioa of
           Pure msg -> Pure msg
-          Impure x -> Impure (\b -> case l b of
-                                      Nothing           -> (b, [], Cmd.none)
-                                      Just (a, context) -> let (a2, list, ioa) = x a
-                                                          in (context a2, List.map aux list, Cmd.map aux ioa)
+          Impure x -> Impure (\b -> case getOption b of
+                                      Nothing -> (b, [], Cmd.none)
+                                      Just a  -> let (a2, list, ioa) = x a
+                                                 in (set a2 b, List.map aux list, Cmd.map aux ioa)
                             )
   in aux
 

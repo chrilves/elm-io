@@ -1,4 +1,8 @@
-module ExampleRadioButtons exposing (..)
+module IO.RadioButtons exposing (main)
+
+{-|
+@docs main
+-}
 
 import Html exposing (Html, Attribute, div, fieldset, input, label, text)
 import Html.Attributes exposing (name, style, type_)
@@ -7,6 +11,8 @@ import Markdown
 
 import IO exposing (..)
 
+{-|-}
+main: IO.Program Never Model Msg
 main =
   IO.beginnerVDomProgram { init = chapter1, view = view, subscriptions = IO.dummySub }
 

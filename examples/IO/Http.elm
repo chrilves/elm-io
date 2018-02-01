@@ -1,4 +1,8 @@
-module ExampleHttp exposing (..)
+module IO.Http exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/effects/http.html
@@ -11,6 +15,8 @@ import Json.Decode as Decode
 
 import IO exposing (..)
 
+{-|-}
+main: IO.Program Never Model Msg
 main =
   IO.vDomProgram
     { init = init "cats"

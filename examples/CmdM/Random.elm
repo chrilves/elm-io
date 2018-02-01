@@ -1,4 +1,8 @@
-module ExampleRandom exposing (..)
+module CmdM.Random exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/effects/random.html
@@ -9,6 +13,8 @@ import Random
 
 import CmdM exposing (..)
 
+{-|-}
+main: CmdM.Program Never Model Msg
 main =
   CmdM.vDomProgram
     { init = init

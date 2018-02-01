@@ -1,4 +1,8 @@
-module ExampleTime exposing (..)
+module IO.Time exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/effects/time.html
@@ -8,58 +12,40 @@ import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Time exposing (Time, second)
 
+import IO exposing (..)
 
-
+{-|-}
+main: IO.Program Never Model Msg
 main =
-  Html.program
+  IO.beginnerVDomProgram
     { init = init
     , view = view
-    , update = update
     , subscriptions = subscriptions
     }
-
-
 
 -- MODEL
 
 
 type alias Model = Time
 
-
-init : (Model, Cmd Msg)
-init =
-  (0, Cmd.none)
-
+init : Model
+init = 0
 
 
 -- UPDATE
 
-
-type Msg
-  = Tick Time
-
-
-update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
-  case msg of
-    Tick newTime ->
-      (newTime, Cmd.none)
-
-
+type alias Msg = ()
 
 -- SUBSCRIPTIONS
 
-
-subscriptions : Model -> Sub Msg
+subscriptions : Model -> Sub (IO Model Msg)
 subscriptions model =
-  Time.every second Tick
-
+  Time.every second IO.set
 
 
 -- VIEW
 
-
-view : Model -> Html Msg
+view : Model -> Html a
 view model =
   let
     angle =

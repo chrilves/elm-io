@@ -1,4 +1,8 @@
-module ExampleWebSocket exposing (..)
+module IO.WebSocket exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/effects/web_sockets.html
@@ -11,6 +15,8 @@ import WebSocket
 import IO exposing (..)
 import IO.Infix exposing (..)
 
+{-|-}
+main: IO.Program Never Model Msg
 main =
   IO.beginnerVDomProgram
     { init = init

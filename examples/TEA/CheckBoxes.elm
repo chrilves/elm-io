@@ -1,11 +1,16 @@
-module ExampleCheckBoxes exposing (..)
+module TEA.CheckBoxes exposing (main)
+
+{-|
+@docs main
+-}
 
 import Html exposing (Html, beginnerProgram, fieldset, input, label, text)
 import Html.Attributes exposing (style, type_)
 import Html.Events exposing (onClick)
 
 
-
+{-|-}
+main: Program Never Model Msg
 main =
   beginnerProgram { model = optOut, update = update, view = view }
 

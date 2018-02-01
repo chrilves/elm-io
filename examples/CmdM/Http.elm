@@ -1,4 +1,8 @@
-module ExampleHttp exposing (..)
+module CmdM.Http exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/effects/http.html
@@ -9,10 +13,12 @@ import Html.Events exposing (..)
 import Http
 import Json.Decode as Decode
 
+import CmdM exposing (..)
 
-
+{-|-}
+main: CmdM.Program Never Model Msg
 main =
-  Html.program
+  CmdM.vDomProgram
     { init = init "cats"
     , view = view
     , update = update
@@ -30,7 +36,7 @@ type alias Model =
   }
 
 
-init : String -> (Model, Cmd Msg)
+init : String -> (Model, CmdM Msg)
 init topic =
   ( Model topic "waiting.gif"
   , getRandomGif topic
@@ -41,33 +47,28 @@ init topic =
 -- UPDATE
 
 
-type Msg
-  = MorePlease
-  | NewGif (Result Http.Error String)
+type alias Msg = Result Http.Error String
 
 
-update : Msg -> Model -> (Model, Cmd Msg)
+update : Msg -> Model -> (Model, CmdM Msg)
 update msg model =
   case msg of
-    MorePlease ->
-      (model, getRandomGif model.topic)
+    Ok newUrl ->
+      (Model model.topic newUrl, CmdM.none)
 
-    NewGif (Ok newUrl) ->
-      (Model model.topic newUrl, Cmd.none)
-
-    NewGif (Err _) ->
-      (model, Cmd.none)
-
+    Err _ ->
+      (model, CmdM.none)
 
 
 -- VIEW
 
 
-view : Model -> Html Msg
+view : Model -> Html (CmdM Msg)
 view model =
   div []
     [ h2 [] [text model.topic]
-    , button [ onClick MorePlease ] [ text "More Please!" ]
+    -- The view can direcly trigger a command
+    , button [ onClick (getRandomGif model.topic)] [ text "More Please!" ]
     , br [] []
     , img [src model.gifUrl] []
     ]
@@ -77,7 +78,7 @@ view model =
 -- SUBSCRIPTIONS
 
 
-subscriptions : Model -> Sub Msg
+subscriptions : Model -> Sub (CmdM Msg)
 subscriptions model =
   Sub.none
 
@@ -86,13 +87,13 @@ subscriptions model =
 -- HTTP
 
 
-getRandomGif : String -> Cmd Msg
+getRandomGif : String -> CmdM Msg
 getRandomGif topic =
   let
     url =
       "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=" ++ topic
   in
-    Http.send NewGif (Http.get url decodeGifUrl)
+    CmdM.lift (Http.send identity (Http.get url decodeGifUrl))
 
 
 decodeGifUrl : Decode.Decoder String

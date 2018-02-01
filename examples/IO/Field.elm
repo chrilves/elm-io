@@ -1,4 +1,8 @@
-module ExampleField exposing (..)
+module IO.Field exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read all about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/user_input/text_fields.html
@@ -13,6 +17,7 @@ import IO exposing (..)
 type alias Model = String
 type alias Msg   = ()
 
+{-|-}
 main : IO.Program Never Model Msg
 main =
   IO.beginnerVDomProgram { init = "", view = view, subscriptions = IO.dummySub }

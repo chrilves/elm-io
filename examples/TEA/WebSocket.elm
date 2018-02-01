@@ -1,4 +1,8 @@
-module ExampleWebSocket exposing (..)
+module TEA.WebSocket exposing (main)
+
+{-|
+@docs main
+-}
 
 -- Read more about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/effects/web_sockets.html
@@ -9,7 +13,8 @@ import Html.Events exposing (..)
 import WebSocket
 
 
-
+{-|-}
+main: Program Never Model Msg
 main =
   Html.program
     { init = init

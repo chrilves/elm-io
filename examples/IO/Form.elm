@@ -1,4 +1,8 @@
-module ExampleForm exposing (..)
+module IO.Form exposing (main)
+
+{-|
+@docs main
+-}
 -- Read all about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/user_input/forms.html
 
@@ -8,11 +12,13 @@ import Html.Events exposing (onInput)
 
 import IO exposing (..)
 
+{-|-}
+main: IO.Program Never Model Msg
 main =
-  Html.beginnerProgram
-    { model = model
+  IO.beginnerVDomProgram
+    { init = init
     , view = view
-    , update = update
+    , subscriptions = IO.dummySub
     }
 
 
@@ -27,8 +33,8 @@ type alias Model =
   }
 
 
-model : Model
-model =
+init : Model
+init =
   Model "" "" ""
 
 
