@@ -4,7 +4,7 @@ module IO exposing (
   {- Monoid       -} none, batch, combine, list,
   {- Transformer  -} lift, liftM, liftUpdate,
   {- State        -} get, set, modify,
-  {- Optics       -} lens, optional,
+  {- Optics       -} lens, optional, iso, prism,
   {- Traversal    -} traverse, mapM,
   {- Dummy        -} dummyUpdate, dummySub,
   Program,
@@ -41,8 +41,8 @@ This module port the two main ways of running an Elm application to [IO](#IO).
 # Classic monadic operations
 @docs map, andThen, join, ap, seq, traverse, mapM
 
-# Passing from a model to another
-@docs lens, optional
+# Passing from a model to another via [optics](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest)
+@docs lens, optional, iso, prism
 
 # Dummy values
 @docs none, dummyUpdate, dummySub
@@ -59,6 +59,8 @@ messages and commands is **not defined**.
 import Platform.Cmd exposing (..)
 import Monocle.Lens exposing (..)
 import Monocle.Optional exposing (..)
+import Monocle.Iso exposing (..)
+import Monocle.Prism exposing (..)
 import VirtualDom exposing (..)
 import CmdM exposing (..)
 import CmdM.Internal
@@ -210,7 +212,7 @@ modify f = Impure (\s -> (f s, [Pure ()], Cmd.none))
 
 -- Optics
 
-{-|Congruence by a [Lens](package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Lens) on an [IO](#IO).
+{-|Congruence by a [Lens](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Lens) on an [IO](#IO).
 
 It would be silly to force users to redefine every [IO](#IO)
 for each application model. Lenses enable to lift an [IO](#IO)
@@ -230,8 +232,9 @@ lens {get, set} =
                              )
   in aux
 
-{-|Congruence by a [Optional](package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional) on an [IO](#IO).
-Just like lenses but with [Optional](package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional).
+{-|Congruence by a [Optional](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional) on an [IO](#IO).
+Just like lenses but with [Optional](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional).
+If the optional returns `Nothing`, then the [IO](#IO) does nothing.
 -}
 optional : Optional b a -> IO a msg -> IO b msg
 optional {getOption, set} =
@@ -244,6 +247,36 @@ optional {getOption, set} =
                                                  in (set a2 b, List.map aux list, Cmd.map aux ioa)
                             )
   in aux
+
+{-|Congruence by a [Iso](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Iso) on an [IO](#IO).
+Just like lenses but with [Iso](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Iso).
+-}
+iso : Iso b a -> IO a msg -> IO b msg
+iso {get, reverseGet} =
+  let aux iob =
+        case iob of
+          Pure msg -> Pure msg
+          Impure x -> Impure (\b -> let (a, list, cmd)   = x (get b)
+                                    in (reverseGet a, List.map aux list, Cmd.map aux cmd)
+                             )
+  in aux
+
+{-|Congruence by a [Prism](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Prism) on an [IO](#IO).
+Just like lenses but with [Prism](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Iso).
+If the prism returns `Nothing`, then the [IO](#IO) does nothing.
+-}
+prism : Prism b a -> IO a msg -> IO b msg
+prism {getOption, reverseGet} =
+  let aux ioa =
+        case ioa of
+          Pure msg -> Pure msg
+          Impure x -> Impure (\b -> case getOption b of
+                                      Nothing -> (b, [], Cmd.none)
+                                      Just a  -> let (a2, list, ioa) = x a
+                                                 in (reverseGet a2, List.map aux list, Cmd.map aux ioa)
+                            )
+  in aux
+
 
 {-|You can think of traverse like a [map](#map) but with effects.
 It maps a function performing [IO](#IO) effects over a list.
