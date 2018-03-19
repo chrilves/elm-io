@@ -1,3 +1,10 @@
 # Examples from http://elm-lang.org/examples transated into [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM) and [IO](http://package.elm-lang.org/packages/chrilves/elm-io/latest/IO)
 
 The [TEA](https://github.com/chrilves/elm-io/tree/master/examples/TEA) folder contains original examples from http://elm-lang.org/examples. Their [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM) counterparts are located into the [CmdM](https://github.com/chrilves/elm-io/tree/master/examples/CmdM) folder and their [IO](http://package.elm-lang.org/packages/chrilves/elm-io/latest/IO) ones in the [IO](https://github.com/chrilves/elm-io/tree/master/examples/IO) folder.
+
+# Compiling
+
+From the [example](https://github.com/chrilves/elm-io/tree/master/examples) directory:
+
+- If this version is not yet published, install [elm-github-install](https://github.com/gdotdesign/elm-github-install) and then type `elm-install` to download all dependencies.
+- either run `elm-make` or `elm-reactor`.
