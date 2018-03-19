@@ -26,6 +26,23 @@ You have two options:
 - the [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM) approach lets you program the way you used to but lets you trigger commands in the view and chain commands as you like. The model is still updated in the update function, not in the view!
 - the [IO](http://package.elm-lang.org/packages/chrilves/elm-io/latest/IO) approach, in addition of the [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM)'s benefits, lets you read and write the state directly in commands. You can then alter the state directly from the view.
 
+## Installing version 2.0.0 beta
+
+Version 2.0.0 is still in beta but use it thanks to [elm-github-install](https://github.com/gdotdesign/elm-github-install). Adapt your `elm-package.json` with:
+
+```json
+{
+    "dependencies": {
+        "chrilves/elm-io": "2.0.0 <= v < 3.0.0"
+    },
+    "dependency-sources": {
+        "chrilves/elm-io": "git@github.com:chrilves/elm-io"
+    }
+}
+```
+
+Then run `elm-install`.
+
 ## The [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM) monad
 
 The [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM)
