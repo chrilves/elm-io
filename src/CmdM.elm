@@ -1,39 +1,26 @@
-module CmdM
-    exposing
-        ( CmdM
-        , Program
-        , andThen
-        , ap
-        , batch
-        , combine
-        , join
-        , {- Transformer -} lift
-        , list
-        , map
-        , mapM
-        , {- Monoid -} none
-        , program
-        , programWithFlags
-        , {- Monadic -} pure
-        , seq
-        , {- Run no flags -} transform
-        , {- Run    flags -} transformWithFlags
-        , {- Traversal -} traverse
-        , vDomProgram
-        , vDomProgramWithFlags
-        )
+module CmdM exposing
+    ( CmdM
+    , Program, element, document, application
+    , pure, lift, none
+    , map, andThen, join, ap, seq, traverse, mapM
+    , transform
+    , batch, batchM
+    )
+
 
 {-| This module provides a monadic interface for commands.
 
 Basically [CmdM](#CmdM) is like `Cmd` but is a monad, which means
 you can chain effects as you like!
+
 @docs CmdM
 
 
 # Runing an Elm application with [CmdM](#CmdM)
 
 This module port the four main way of running an Elm application to [CmdM](#CmdM).
-@docs Program, program, vDomProgram, programWithFlags, vDomProgramWithFlags
+
+@docs Program, element, document, application
 
 
 # Lifting values and commands into [CmdM](#CmdM)
@@ -48,20 +35,26 @@ This module port the four main way of running an Elm application to [CmdM](#CmdM
 
 # Transform CmdM into regular Elm
 
-@docs transform, transformWithFlags
+@docs transform
 
 
 # Batch operations
 
 Beware that batch operations might not do what you think. The execution order of
 messages and commands is **not defined**.
-@docs batch, combine, list
+
+@docs batch, batchM
 
 -}
 
+import Browser exposing (..)
+import Browser.Navigation exposing (Key)
 import CmdM.Internal exposing (..)
+import Html exposing (Html)
 import Platform.Cmd exposing (..)
-import VirtualDom exposing (..)
+import Url exposing (..)
+import CmdM.Internal exposing (..)
+
 
 
 {-| Monadic interface for commands.
@@ -74,10 +67,7 @@ contains values of type `msg`.
 type alias CmdM msg =
     CmdM.Internal.CmdM msg
 
-
-
 -- Monadic
-
 
 {-| Returns a [CmdM](#CmdM) whose only effect is containing the value given to [pure](#pure).
 -}
@@ -88,21 +78,14 @@ pure a =
 
 {-| Send messages in batch
 -}
-list : List a -> CmdM a
-list l =
-    case l of
-        [ x ] ->
-            Pure x
-
-        _ ->
-            Impure ( List.map Pure l, Cmd.none )
+batch : List a -> CmdM a
+batch l = Impure (Batch (List.map Pure l))
 
 
 {-| Transforms an Elm command into a monadic command [CmdM](#CmdM).
 -}
 lift : Cmd a -> CmdM a
-lift cmd =
-    Impure ( [], Cmd.map Pure cmd )
+lift cmd = Impure (Command (Cmd.map Pure cmd))
 
 
 {-| Map a function over an [CmdM](#CmdM).
@@ -164,8 +147,7 @@ andThen f =
 
 -}
 join : CmdM (CmdM a) -> CmdM a
-join =
-    andThen identity
+join = andThen identity
 
 
 {-| Transform a [CmdM](#CmdM) containing functions into functions on [CmdM](#CmdM).
@@ -178,65 +160,27 @@ It enable to easily lift functions to [CmdM](#CmdM).
 
 -}
 ap : CmdM (a -> b) -> CmdM a -> CmdM b
-ap mf ma =
-    andThen (flip map ma) mf
-
-
+ap mf ma = mf |> andThen (\f -> map f ma)
+            
 {-| Run the first argument, ignore the result, then run the second.
 -}
 seq : CmdM a -> CmdM b -> CmdM b
 seq =
     map (\_ -> identity) >> ap
 
-
-
 -- Monoid
-
 
 {-| A [CmdM](#CmdM) doing nothing (an containing no values!).
 -}
 none : CmdM a
-none =
-    lift Cmd.none
+none = batch []
 
 
 {-| **I strongly discourage you from using it. Use [mapM](#mapM) instead.**
 Group commands in a batch. Its behavior may not be what you expect!
 -}
-batch : List (CmdM a) -> CmdM a
-batch l =
-    let
-        accumulate : List (CmdM b) -> List (List (CmdM b)) -> Cmd (CmdM b) -> CmdM b
-        accumulate l lists cmd =
-            case l of
-                [] ->
-                    Impure ( List.reverse lists |> List.concat, cmd )
-
-                hd :: tl ->
-                    case hd of
-                        Pure _ ->
-                            accumulate tl ([ hd ] :: lists) cmd
-
-                        Impure ( list2, cmd2 ) ->
-                            accumulate tl (list2 :: lists) (Cmd.batch [ cmd, cmd2 ])
-    in
-    case l of
-        [] ->
-            none
-
-        [ x ] ->
-            x
-
-        _ ->
-            accumulate l [] Cmd.none
-
-
-{-| **I strongly discourage you from using it. Use [mapM](#mapM) instead.**
-Group commands in a batch. Its behavior may not be what you expect!
--}
-combine : CmdM a -> CmdM a -> CmdM a
-combine x y =
-    batch [ x, y ]
+batchM : List (CmdM a) -> CmdM a
+batchM l = join (batch l)
 
 
 {-| You can think of traverse like a [map](#map) but with effects.
@@ -274,118 +218,107 @@ type alias Program flags model msg =
 
 
 runUpdate : (msg -> model -> ( model, CmdM msg )) -> CmdM msg -> model -> ( model, Cmd (CmdM msg) )
-runUpdate f cmdm =
+runUpdate f =
     let
-        aux : List (CmdM msg) -> Cmd (CmdM msg) -> model -> ( model, Cmd (CmdM msg) )
-        aux l cmd m =
-            case l of
-                [] ->
-                    ( m, cmd )
-
-                hd :: tl ->
-                    case hd of
-                        Pure msg ->
-                            let
-                                ( model2, cmdm2 ) =
-                                    f msg m
-                            in
-                            aux (cmdm2 :: tl) cmd model2
-
-                        Impure ( list2, cmd2 ) ->
-                            aux (list2 ++ tl) (Cmd.batch [ cmd, cmd2 ]) m
-    in
-    aux [ cmdm ] Cmd.none
+        aux : CmdM msg -> model -> ( model, Cmd (CmdM msg) )
+        aux cmdm model =
+            case cmdm of
+                Pure msg -> let (model2, cmdm2) = f msg model
+                            in aux cmdm2 model2
+                Impure (Command cmd) -> (model, cmd)
+                Impure (Batch l) ->
+                    let (modelEnd, cmdsEnd) =
+                            List.foldl (\cmdm2 (modelAcc, cmdsAcc) ->
+                                            let (m3, cs3) = aux cmdm2 modelAcc
+                                            in (m3, cs3 :: cmdsAcc)
+                                       ) (model, []) l
+                    in (modelEnd, Cmd.batch cmdsEnd)
+    in aux
 
 
 {-| Transform a program using [CmdM](#CmdM) into a normal program.
 -}
 transform :
-    { y | init : ( model, CmdM msg ), update : msg -> model -> ( model, CmdM msg ) }
-    -> { y | init : ( model, Cmd (CmdM msg) ), update : CmdM msg -> model -> ( model, Cmd (CmdM msg) ) }
-transform args =
+    (msg -> model -> ( model, CmdM msg ))
+    ->
+        { update : CmdM msg -> model -> ( model, Cmd (CmdM msg) )
+        , initTransformer : ( model, CmdM msg ) -> ( model, Cmd (CmdM msg) )
+        }
+transform update =
     let
-        update : CmdM msg -> model -> ( model, Cmd (CmdM msg) )
-        update =
-            runUpdate args.update
-
-        init : ( model, Cmd (CmdM msg) )
-        init =
-            let
-                ( model0, cmdm0 ) =
-                    args.init
-            in
-            update cmdm0 model0
+        newUpdate =
+            runUpdate update
     in
-    { args | init = init, update = update }
-
-
-{-| Port of _Platform_.program with [CmdM](#CmdM).
--}
-program :
-    { init : ( model, CmdM msg )
-    , update : msg -> model -> ( model, CmdM msg )
-    , subscriptions : model -> Sub (CmdM msg)
+    { update = newUpdate
+    , initTransformer = \( m, cmdm ) -> newUpdate cmdm m
     }
-    -> Program Never model msg
-program =
-    transform >> Platform.program
 
 
-{-| Port of _VirtualDom_.program with [CmdM](#CmdM) (also works with _HTML_).
+{-| Transform an element program using [CmdM](#CmdM) into a normal element program.
 -}
-vDomProgram :
-    { init : ( model, CmdM msg )
-    , update : msg -> model -> ( model, CmdM msg )
-    , subscriptions : model -> Sub (CmdM msg)
-    , view : model -> Node (CmdM msg)
-    }
-    -> Program Never model msg
-vDomProgram =
-    transform >> VirtualDom.program
-
-
-{-| Transform a program using [CmdM](#CmdM) into a normal program.
--}
-transformWithFlags :
-    { y | init : flags -> ( model, CmdM msg ), update : msg -> model -> ( model, CmdM msg ) }
-    -> { y | init : flags -> ( model, Cmd (CmdM msg) ), update : CmdM msg -> model -> ( model, Cmd (CmdM msg) ) }
-transformWithFlags args =
-    let
-        update : CmdM msg -> model -> ( model, Cmd (CmdM msg) )
-        update =
-            runUpdate args.update
-
-        init : flags -> ( model, Cmd (CmdM msg) )
-        init flags =
-            let
-                ( model0, cmdm0 ) =
-                    args.init flags
-            in
-            update cmdm0 model0
-    in
-    { args | init = init, update = update }
-
-
-{-| Port of _Platform.programWithFlags_ with [CmdM](#CmdM).
--}
-programWithFlags :
+element :
     { init : flags -> ( model, CmdM msg )
+    , view : model -> Html (CmdM msg)
     , update : msg -> model -> ( model, CmdM msg )
     , subscriptions : model -> Sub (CmdM msg)
     }
     -> Program flags model msg
-programWithFlags =
-    transformWithFlags >> Platform.programWithFlags
+element args =
+    let
+        new =
+            transform args.update
+    in
+    Browser.element
+        { update = new.update
+        , init = args.init >> new.initTransformer
+        , view = args.view
+        , subscriptions = args.subscriptions
+        }
 
 
-{-| Port of _VirtualDom.programWithFlags_ with [CmdM](#CmdM) (also works with _Html_).
+{-| Transform a document program using [CmdM](#CmdM) into a normal document program.
 -}
-vDomProgramWithFlags :
+document :
     { init : flags -> ( model, CmdM msg )
+    , view : model -> Document (CmdM msg)
     , update : msg -> model -> ( model, CmdM msg )
     , subscriptions : model -> Sub (CmdM msg)
-    , view : model -> Node (CmdM msg)
     }
     -> Program flags model msg
-vDomProgramWithFlags =
-    transformWithFlags >> VirtualDom.programWithFlags
+document args =
+    let
+        new =
+            transform args.update
+    in
+    Browser.document
+        { update = new.update
+        , init = args.init >> new.initTransformer
+        , view = args.view
+        , subscriptions = args.subscriptions
+        }
+
+
+{-| Transform an application program using [CmdM](#CmdM) into a normal application program.
+-}
+application :
+    { init : flags -> Url -> Key -> ( model, CmdM msg )
+    , view : model -> Document (CmdM msg)
+    , update : msg -> model -> ( model, CmdM msg )
+    , subscriptions : model -> Sub (CmdM msg)
+    , onUrlRequest : UrlRequest -> CmdM msg
+    , onUrlChange : Url -> CmdM msg
+    }
+    -> Program flags model msg
+application args =
+    let
+        new =
+            transform args.update
+    in
+    Browser.application
+        { update = new.update
+        , init = \f u k -> new.initTransformer (args.init f u k)
+        , view = args.view
+        , subscriptions = args.subscriptions
+        , onUrlRequest = args.onUrlRequest
+        , onUrlChange = args.onUrlChange
+        }

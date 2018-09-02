@@ -16,10 +16,10 @@ import Json.Decode as Decode
 import CmdM exposing (..)
 
 {-|-}
-main: CmdM.Program Never Model Msg
+main: CmdM.Program () Model Msg
 main =
-  CmdM.vDomProgram
-    { init = init "cats"
+  CmdM.element
+    { init = \_ -> init "cats"
     , view = view
     , update = update
     , subscriptions = subscriptions
@@ -93,7 +93,10 @@ getRandomGif topic =
     url =
       "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=" ++ topic
   in
-    CmdM.lift (Http.send identity (Http.get url decodeGifUrl))
+    CmdM.lift (Http.get { url = url
+                        , expect = Http.expectJson (\r -> r) decodeGifUrl
+                        }
+              )
 
 
 decodeGifUrl : Decode.Decoder String

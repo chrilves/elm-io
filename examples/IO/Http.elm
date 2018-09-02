@@ -16,12 +16,11 @@ import Json.Decode as Decode
 import IO exposing (..)
 
 {-|-}
-main: IO.Program Never Model Msg
+main: IO.Program () Model Msg
 main =
-  IO.vDomProgram
-    { init = init "cats"
+  IO.sandbox
+    { init = \_ -> init "cats"
     , view = view
-    , update = IO.dummyUpdate
     , subscriptions = IO.dummySub
     }
 
@@ -65,7 +64,10 @@ getRandomGif =
       topic = model.topic
       url = "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=" ++ topic
     in
-      IO.lift (Http.send identity (Http.get url decodeGifUrl)) |> IO.andThen (\response ->
+      IO.lift (Http.get { url = url
+                        , expect = Http.expectJson (\r -> r) decodeGifUrl
+                        }
+              ) |> IO.andThen (\response ->
         case response of
           Ok newUrl -> IO.set (Model topic newUrl)
           Err _     -> IO.none

@@ -1,5 +1,6 @@
-module IO.Internal exposing (..)
+module IO.Internal exposing (Base, IO(..), baseMap)
 
+import CmdM.Internal as CmdM
 
 type IO model a
     = Pure a
@@ -18,13 +19,10 @@ type IO model a
 
 
 type alias Base model a =
-    model -> ( model, List a, Cmd a )
+    model -> (model, CmdM.Base a)
 
 
 baseMap : (a -> b) -> Base model a -> Base model b
-baseMap f m s =
-    let
-        ( s2, l, cmd ) =
-            m s
-    in
-    ( s2, List.map f l, Cmd.map f cmd )
+baseMap f b m =
+    let (m2, b2) = b m
+    in (m2, CmdM.baseMap f b2)

@@ -10,12 +10,13 @@ module TEA.Form exposing (main)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onInput)
+import Browser
 
 {-|-}
-main: Program Never Model Msg
+main: Program () Model Msg
 main =
-  Html.beginnerProgram
-    { model = model
+  Browser.sandbox
+    { init = init
     , view = view
     , update = update
     }
@@ -32,11 +33,8 @@ type alias Model =
   }
 
 
-model : Model
-model =
-  Model "" "" ""
-
-
+init : Model
+init = Model "" "" ""
 
 -- UPDATE
 
@@ -83,4 +81,4 @@ viewValidation model =
       else
         ("red", "Passwords do not match!")
   in
-    div [ style [("color", color)] ] [ text message ]
+    div [style "color" color] [ text message ]

@@ -12,9 +12,13 @@ import Markdown
 import IO exposing (..)
 
 {-|-}
-main: IO.Program Never Model Msg
+main: IO.Program () Model Msg
 main =
-  IO.beginnerVDomProgram { init = chapter1, view = view, subscriptions = IO.dummySub }
+  IO.sandbox {
+    init = \_ -> (chapter1, IO.none),
+    view = view,
+    subscriptions = IO.dummySub
+  }
 
 -- MODEL
 
@@ -80,8 +84,7 @@ view model =
 radio : String -> msg -> Html msg
 radio value msg =
   label
-    [ style [("padding", "20px")]
-    ]
+    [ style "padding" "20px"]
     [ input [ type_ "radio", name "font-size", onClick msg ] []
     , text value
     ]
@@ -92,13 +95,7 @@ sizeToStyle fontSize =
   let
     size =
       case fontSize of
-        Small ->
-          "0.8em"
-
-        Medium ->
-          "1em"
-
-        Large ->
-          "1.2em"
-  in
-    style [("font-size", size)]
+        Small  -> "0.8em"
+        Medium -> "1em"
+        Large  -> "1.2em"
+  in style "font-size" size

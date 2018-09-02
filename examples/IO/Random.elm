@@ -14,10 +14,10 @@ import Random
 import IO exposing (..)
 
 {-|-}
-main: IO.Program Never Model Msg
+main: IO.Program () Model Msg
 main =
-  IO.beginnerVDomProgram
-    { init = init
+  IO.sandbox
+    { init = \_ -> (init, IO.none)
     , view = view
     , subscriptions = IO.dummySub
     }
@@ -26,9 +26,7 @@ main =
 -- MODEL
 
 
-type alias Model =
-  { dieFace : Int
-  }
+type alias Model = { dieFace : Int }
 
 init : Model
 init = Model 1
@@ -50,6 +48,6 @@ roll =
 view : Model -> Html (IO Model Msg)
 view model =
   div []
-    [ h1 [] [ text (toString model.dieFace) ]
+    [ h1 [] [ text (String.fromInt model.dieFace) ]
     , button [ onClick roll ] [ text "Roll" ]
     ]

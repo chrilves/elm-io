@@ -4,16 +4,20 @@ module IO.CheckBoxes exposing (main)
 @docs main
 -}
 
-import Html exposing (Html, beginnerProgram, fieldset, input, label, text)
+import Html exposing (Html, fieldset, input, label, text)
 import Html.Attributes exposing (style, type_)
 import Html.Events exposing (onClick)
 
 import IO exposing (..)
 
 {-|-}
-main: IO.Program Never Model Msg
+main: IO.Program () Model Msg
 main =
-  IO.beginnerVDomProgram { init = optOut, view = view, subscriptions = IO.dummySub }
+  IO.sandbox {
+    init = \_ -> (optOut, IO.none),
+    view = view,
+    subscriptions = IO.dummySub
+  }
 
 
 -- MODEL
@@ -58,8 +62,7 @@ view model =
 checkbox : msg -> String -> Html msg
 checkbox msg name =
   label
-    [ style [("padding", "20px")]
-    ]
+    [ style "padding"  "20px"]
     [ input [ type_ "checkbox", onClick msg ] []
     , text name
     ]

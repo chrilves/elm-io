@@ -14,36 +14,26 @@ import Random
 import CmdM exposing (..)
 
 {-|-}
-main: CmdM.Program Never Model Msg
+main: CmdM.Program () Model Msg
 main =
-  CmdM.vDomProgram
-    { init = init
+  CmdM.element
+    { init = \_ -> init
     , view = view
     , update = update
     , subscriptions = subscriptions
     }
 
-
-
 -- MODEL
 
-
-type alias Model =
-  { dieFace : Int
-  }
+type alias Model = { dieFace : Int }
 
 
 init : (Model, CmdM Msg)
-init =
-  (Model 1, CmdM.none)
-
-
+init = (Model 1, CmdM.none)
 
 -- UPDATE
 
-
-type Msg
-  = NewFace Int
+type Msg = NewFace Int
 
 roll : CmdM Msg
 roll = CmdM.lift (Random.generate NewFace (Random.int 1 6))
@@ -57,16 +47,14 @@ update msg model =
 
 -- SUBSCRIPTIONS
 
-
 subscriptions : Model -> Sub a
-subscriptions model =
-  Sub.none
+subscriptions _ = Sub.none
 
 -- VIEW
 
 view : Model -> Html (CmdM Msg)
 view model =
   div []
-    [ h1 [] [ text (toString model.dieFace) ]
+    [ h1 [] [ text (String.fromInt model.dieFace) ]
     , button [ onClick roll ] [ text "Roll" ]
     ]

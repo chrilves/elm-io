@@ -13,10 +13,10 @@ import Html.Events exposing (onInput)
 import IO exposing (..)
 
 {-|-}
-main: IO.Program Never Model Msg
+main: IO.Program () Model Msg
 main =
-  IO.beginnerVDomProgram
-    { init = init
+  IO.sandbox
+    { init = \_ -> (init, IO.none)
     , view = view
     , subscriptions = IO.dummySub
     }
@@ -75,4 +75,4 @@ viewValidation model =
       else
         ("red", "Passwords do not match!")
   in
-    div [ style [("color", color)] ] [ text message ]
+    div [style "color" color] [ text message ]

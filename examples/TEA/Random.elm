@@ -10,13 +10,14 @@ module TEA.Random exposing (main)
 import Html exposing (..)
 import Html.Events exposing (..)
 import Random
+import Browser
 
 
 {-|-}
-main: Program Never Model Msg
+main: Program () Model Msg
 main =
-  Html.program
-    { init = init
+  Browser.element
+    { init = \_ -> init
     , view = view
     , update = update
     , subscriptions = subscriptions
@@ -72,6 +73,6 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
   div []
-    [ h1 [] [ text (toString model.dieFace) ]
+    [ h1 [] [ text (String.fromInt model.dieFace) ]
     , button [ onClick Roll ] [ text "Roll" ]
     ]

@@ -7,15 +7,16 @@ module TEA.Field exposing (main)
 -- Read all about this program in the official Elm guide:
 -- https://guide.elm-lang.org/architecture/user_input/text_fields.html
 
-import Html exposing (Html, Attribute, beginnerProgram, text, div, input)
+import Html exposing (Html, Attribute, text, div, input)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onInput)
 import String
+import Browser
 
 {-|-}
-main: Program Never String Msg
+main: Program () String Msg
 main =
-  beginnerProgram { model = "", view = view, update = update }
+  Browser.sandbox { init = "", view = view, update = update }
 
 
 -- UPDATE
@@ -30,15 +31,14 @@ update (NewContent content) oldContent =
 
 view content =
   div []
-    [ input [ placeholder "Text to reverse", onInput NewContent, myStyle ] []
-    , div [ myStyle ] [ text (String.reverse content) ]
+    [ input ([ placeholder "Text to reverse", onInput NewContent] ++ myStyle) []
+    , div myStyle [ text (String.reverse content) ]
     ]
 
 myStyle =
-  style
     [ ("width", "100%")
     , ("height", "40px")
     , ("padding", "10px 0")
     , ("font-size", "2em")
     , ("text-align", "center")
-    ]
+    ] |> List.map (\(k,v) -> style k v)

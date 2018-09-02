@@ -1,42 +1,14 @@
-module IO
-    exposing
-        ( IO
-        , Program
-        , andThen
-        , ap
-        , batch
-        , beginnerProgram
-        , beginnerProgramWithFlags
-        , beginnerVDomProgram
-        , beginnerVDomProgramWithFlags
-        , combine
-        , dummySub
-        , {- Dummy -} dummyUpdate
-        , {- State -} get
-        , iso
-        , join
-        , {- Optics -} lens
-        , {- Transformer -} lift
-        , liftM
-        , liftUpdate
-        , list
-        , map
-        , mapM
-        , modify
-        , {- Monoid -} none
-        , optional
-        , prism
-        , program
-        , programWithFlags
-        , {- Monadic -} pure
-        , seq
-        , set
-        , {- Run no flags -} transform
-        , {- Run    flags -} transformWithFlags
-        , {- Traversal -} traverse
-        , vDomProgram
-        , vDomProgramWithFlags
-        )
+module IO exposing
+    ( IO
+    , Program, sandbox, element, document, application
+    , pure, lift, liftM, liftUpdate
+    , get, set, modify
+    , map, andThen, join, ap, seq, traverse, mapM
+    , lens, optional, iso, prism
+    , none, dummyUpdate, dummySub
+    , transform
+    , batch, batchM
+    )
 
 {-| This module provides a monadic interface for _The Elm Architecture_.
 
@@ -53,17 +25,8 @@ Basically [IO](#IO) is a monad enabing two kinds of effects :
 # Runing a web application with [IO](#IO)
 
 This module port the two main ways of running an Elm application to [IO](#IO).
-@docs Program
 
-
-## Web applications
-
-@docs beginnerVDomProgram, vDomProgram, beginnerVDomProgramWithFlags, vDomProgramWithFlags
-
-
-## Headless applications
-
-@docs beginnerProgram, program, beginnerProgramWithFlags, programWithFlags
+@docs Program, sandbox, element, document, application
 
 
 # Lifting values and commands into [IO](#IO)
@@ -93,26 +56,30 @@ This module port the two main ways of running an Elm application to [IO](#IO).
 
 # Transform IO into regular Elm
 
-@docs transform, transformWithFlags
+@docs transform
 
 
 # Batch operations
 
 Beware that batch operations might not do what you think. The execution order of
 messages and commands is **not defined**.
-@docs batch, combine, list
+
+@docs batch, batchM
 
 -}
 
+import Browser exposing (..)
+import Browser.Navigation exposing (Key)
 import CmdM exposing (..)
-import CmdM.Internal
+import CmdM.Internal as CmdMI
+import Html exposing (..)
 import IO.Internal exposing (..)
 import Monocle.Iso exposing (..)
 import Monocle.Lens exposing (..)
 import Monocle.Optional exposing (..)
 import Monocle.Prism exposing (..)
 import Platform.Cmd exposing (..)
-import VirtualDom exposing (..)
+import Url exposing (..)
 
 
 {-| Monadic interface for _The Elm Architecture_.
@@ -124,8 +91,6 @@ perform commands and contains values of type `a`.
 -}
 type alias IO model msg =
     IO.Internal.IO model msg
-
-
 
 -- Monadic
 
@@ -139,15 +104,8 @@ pure a =
 
 {-| Send messages in batch mode
 -}
-list : List a -> IO model a
-list l =
-    case l of
-        [ x ] ->
-            pure x
-
-        _ ->
-            Impure (\model -> ( model, List.map Pure l, Cmd.none ))
-
+batch : List a -> IO model a
+batch l = Impure (\model -> (model, CmdMI.Batch (List.map Pure l)))
 
 {-| Map a function over an [IO](#IO).
 
@@ -159,16 +117,11 @@ list l =
 -}
 map : (a -> b) -> IO model a -> IO model b
 map f =
-    let
-        aux ioa =
+    let aux ioa =
             case ioa of
-                Pure a ->
-                    Pure (f a)
-
-                Impure m ->
-                    Impure (baseMap aux m)
-    in
-    aux
+                Pure a   -> Pure (f a)
+                Impure m -> Impure (baseMap aux m)
+    in aux
 
 
 {-| Chains [IO](#IO)s.
@@ -188,16 +141,11 @@ the function.
 -}
 andThen : (a -> IO model b) -> IO model a -> IO model b
 andThen f =
-    let
-        aux m =
+    let aux m =
             case m of
-                Pure a ->
-                    f a
-
-                Impure x ->
-                    Impure (baseMap aux x)
-    in
-    aux
+                Pure a   -> f a
+                Impure x -> Impure (baseMap aux x)
+    in aux
 
 
 {-| Flatten an [IO](#IO) containing an [IO](#IO) into a simple [IO](#IO).
@@ -208,8 +156,7 @@ andThen f =
 
 -}
 join : IO model (IO model a) -> IO model a
-join =
-    andThen identity
+join = andThen identity
 
 
 {-| Transform an [IO](#IO) containing functions into functions on [IO](#IO)
@@ -222,81 +169,34 @@ It enable to easily lift functions to [IO](#IO).
 
 -}
 ap : IO model (a -> b) -> IO model a -> IO model b
-ap mf ma =
-    andThen (flip map ma) mf
+ap mf ma = andThen (\y -> map y ma) mf
 
 
 {-| Run the first argument, ignore the result, then run the second.
 -}
 seq : IO model a -> IO model b -> IO model b
-seq =
-    map (\_ -> identity) >> ap
-
-
+seq = map (\_ -> identity) >> ap
 
 -- Monoid
-
 
 {-| An [IO](#IO) doing nothing (an containing no values!).
 -}
 none : IO model a
-none =
-    lift Cmd.none
+none = batch []
 
 
 {-| **Its use is strongly discouraged! Use [mapM](#mapM) instead!**
 Combine a list of [IO](#IO).
 -}
-batch : List (IO model a) -> IO model a
-batch l =
-    let
-        accumulate : List (IO model b) -> List (List (IO model b)) -> Cmd (IO model b) -> Base model (IO model b)
-        accumulate ios lists cmd =
-            case ios of
-                [] ->
-                    \m -> ( m, List.reverse lists |> List.concat, cmd )
-
-                hd :: tl ->
-                    case hd of
-                        Pure _ ->
-                            accumulate tl ([ hd ] :: lists) cmd
-
-                        Impure f ->
-                            \m ->
-                                let
-                                    ( m2, list2, cmd2 ) =
-                                        f m
-                                in
-                                accumulate tl (list2 :: lists) (Cmd.batch [ cmd, cmd2 ]) m2
-    in
-    case l of
-        [] ->
-            none
-
-        [ x ] ->
-            x
-
-        _ ->
-            Impure (accumulate l [] Cmd.none)
-
-
-{-| **Its use is strongly discouraged! Use [mapM](#mapM) instead!**
-Combine two [IO](#IO).
--}
-combine : IO model a -> IO model a -> IO model a
-combine x y =
-    batch [ x, y ]
-
-
+batchM : List (IO model a) -> IO model a
+batchM l = join (batch l)
 
 -- Tansformer
-
 
 {-| Lift a _Cmd_ as an [IO](#IO).
 -}
 lift : Cmd a -> IO model a
-lift cmd =
-    Impure (\s -> ( s, [], Cmd.map Pure cmd ))
+lift cmd = Impure (\s -> (s, CmdMI.Command (Cmd.map Pure cmd)))
 
 
 {-| Lift a [CmdM](../CmdM) into an [IO](#IO)
@@ -304,27 +204,16 @@ lift cmd =
 liftM : CmdM a -> IO model a
 liftM cmdm =
     case cmdm of
-        CmdM.Internal.Pure a ->
-            Pure a
-
-        CmdM.Internal.Impure ( l, cmd ) ->
-            Impure (\s -> ( s, List.map liftM l, Cmd.map liftM cmd ))
+        CmdMI.Pure a -> Pure a
+        CmdMI.Impure b -> Impure (\s -> (s, CmdMI.baseMap liftM b))
 
 
 {-| Lift a classic update function into an [IO](#IO).
 -}
 liftUpdate : (model -> ( model, Cmd a )) -> IO model a
-liftUpdate f =
-    Impure
-        (\m ->
-            let
-                ( m2, cmd ) =
-                    f m
-            in
-            ( m2, [], Cmd.map Pure cmd )
-        )
-
-
+liftUpdate f = Impure (\m -> let (m2, cmd) = f m
+                             in (m2, CmdMI.Command (Cmd.map Pure cmd))
+                      )
 
 -- State
 
@@ -332,27 +221,21 @@ liftUpdate f =
 {-| An [IO](#IO) that returns the current model.
 -}
 get : IO model model
-get =
-    Impure (\s -> ( s, [ Pure s ], Cmd.none ))
+get = Impure (\s -> (s, CmdMI.Batch [Pure s]))
 
 
 {-| An [IO](#IO) that sets the model.
 -}
 set : model -> IO model ()
-set s =
-    Impure (\_ -> ( s, [ Pure () ], Cmd.none ))
+set s = Impure (\_ -> (s, CmdMI.Batch [Pure ()]))
 
 
 {-| A [IO](#IO) that modify the model.
 -}
 modify : (model -> model) -> IO model ()
-modify f =
-    Impure (\s -> ( f s, [ Pure () ], Cmd.none ))
-
-
+modify f = Impure (\s -> (f s, CmdMI.Batch [Pure ()]))
 
 -- Optics
-
 
 {-| Congruence by a [Lens](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Lens) on an [IO](#IO).
 
@@ -366,78 +249,48 @@ lift them to you real application's model when needed.
 
 -}
 lens : Lens b a -> IO a msg -> IO b msg
-lens { get, set } =
-    let
-        aux iob =
+lens ll =
+    let aux iob =
             case iob of
                 Pure msg ->
                     Pure msg
 
-                Impure x ->
-                    Impure
-                        (\b ->
-                            let
-                                ( a, list, cmd ) =
-                                    x (get b)
-                            in
-                            ( set a b, List.map aux list, Cmd.map aux cmd )
-                        )
-    in
-    aux
-
+                Impure base -> Impure (\b ->
+                    let (a, cmdmibase) = base (ll.get b)
+                    in (ll.set a b, CmdMI.baseMap aux cmdmibase))
+    in aux
 
 {-| Congruence by a [Optional](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional) on an [IO](#IO).
 Just like lenses but with [Optional](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional).
 If the optional returns `Nothing`, then the [IO](#IO) does nothing.
 -}
 optional : Optional b a -> IO a msg -> IO b msg
-optional { getOption, set } =
-    let
-        aux ioa =
+optional opt =
+    let aux ioa =
             case ioa of
-                Pure msg ->
-                    Pure msg
+                Pure msg -> Pure msg
 
-                Impure x ->
-                    Impure
-                        (\b ->
-                            case getOption b of
-                                Nothing ->
-                                    ( b, [], Cmd.none )
-
-                                Just a ->
-                                    let
-                                        ( a2, list, ioa ) =
-                                            x a
-                                    in
-                                    ( set a2 b, List.map aux list, Cmd.map aux ioa )
-                        )
-    in
-    aux
+                Impure base -> Impure (\b ->
+                    case opt.getOption b of
+                        Nothing -> (b, CmdMI.Batch [])
+                        Just a  ->
+                            let (a2, cmdmibase) = base a
+                            in (opt.set a2 b, CmdMI.baseMap aux cmdmibase))
+    in aux
 
 
 {-| Congruence by a [Iso](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Iso) on an [IO](#IO).
 Just like lenses but with [Iso](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Iso).
 -}
 iso : Iso b a -> IO a msg -> IO b msg
-iso { get, reverseGet } =
-    let
-        aux iob =
+iso liso =
+    let aux iob =
             case iob of
-                Pure msg ->
-                    Pure msg
-
-                Impure x ->
-                    Impure
-                        (\b ->
-                            let
-                                ( a, list, cmd ) =
-                                    x (get b)
-                            in
-                            ( reverseGet a, List.map aux list, Cmd.map aux cmd )
-                        )
-    in
-    aux
+                Pure msg -> Pure msg
+                Impure x -> Impure (\b ->
+                    let (a, cmdmibase) = x (liso.get b)
+                    in (liso.reverseGet a, CmdMI.baseMap aux cmdmibase))
+    in aux
 
 
 {-| Congruence by a [Prism](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Prism) on an [IO](#IO).
@@ -446,28 +299,17 @@ If the prism returns `Nothing`, then the [IO](#IO) does nothing.
 -}
 prism : Prism b a -> IO a msg -> IO b msg
 prism { getOption, reverseGet } =
-    let
-        aux ioa =
+    let aux ioa =
             case ioa of
-                Pure msg ->
-                    Pure msg
+                Pure msg -> Pure msg
 
-                Impure x ->
-                    Impure
-                        (\b ->
-                            case getOption b of
-                                Nothing ->
-                                    ( b, [], Cmd.none )
+                Impure base -> Impure (\b ->
+                    case getOption b of
+                        Nothing -> (b, CmdMI.Batch [])
 
-                                Just a ->
-                                    let
-                                        ( a2, list, ioa ) =
-                                            x a
-                                    in
-                                    ( reverseGet a2, List.map aux list, Cmd.map aux ioa )
-                        )
-    in
-    aux
+                        Just a -> let (a2, cmdmibase) = base a
+                                  in (reverseGet a2, CmdMI.baseMap aux cmdmibase))
+    in aux
 
 
 {-| You can think of traverse like a [map](#map) but with effects.
@@ -475,219 +317,153 @@ It maps a function performing [IO](#IO) effects over a list.
 -}
 traverse : (a -> IO model b) -> List a -> IO model (List b)
 traverse f =
-    let
-        aux l =
+    let aux l =
             case l of
-                [] ->
-                    pure []
-
-                hd :: tl ->
-                    ap (ap (pure (::)) (f hd)) (aux tl)
-    in
-    aux
-
+                [] -> pure []
+                hd :: tl -> ap (ap (pure (::)) (f hd)) (aux tl)
+    in aux
 
 {-| Transform a list of [IO](#IO) into an [IO](#IO) of list.
 -}
 mapM : List (IO model a) -> IO model (List a)
-mapM =
-    traverse identity
-
-
+mapM = traverse identity
 
 -- Dummy
-
 
 {-| Dummy update function.
 -}
 dummyUpdate : a -> IO b c
-dummyUpdate m =
-    none
+dummyUpdate _ = none
 
 
 {-| Dummy subscription function
 -}
 dummySub : a -> Sub b
-dummySub a =
-    Sub.none
-
-
+dummySub a = Sub.none
 
 -- Platform
-
 
 {-| Program using [IO](#IO).
 -}
 type alias Program flags model msg =
     Platform.Program flags model (IO model msg)
 
-
-
 -- The core of all the [IO](#IO) monad! It runs the [IO](#IO) monad using the update function.
 
-
 runUpdate : (msg -> IO model msg) -> IO model msg -> model -> ( model, Cmd (IO model msg) )
-runUpdate f io =
-    let
-        recur : List (IO model msg) -> Cmd (IO model msg) -> model -> ( model, Cmd (IO model msg) )
-        recur acc cmd =
-            case acc of
-                [] ->
-                    \model -> ( model, cmd )
-
-                hd :: tl ->
-                    case hd of
-                        Pure msg ->
-                            recur (f msg :: tl) cmd
-
-                        Impure f ->
-                            \model ->
-                                let
-                                    ( model2, list, cmd2 ) =
-                                        f model
-                                in
-                                recur (list ++ tl) (Cmd.batch [ cmd, cmd2 ]) model2
-    in
-    recur [ io ] Cmd.none
+runUpdate f =
+    let recur : IO model msg -> model -> (model, Cmd (IO model msg))
+        recur io1 model =
+            case io1 of
+                Pure msg    -> recur (f msg) model
+                Impure base ->
+                    let (model2, cmdmibase) = base model
+                    in  case cmdmibase of
+                            CmdMI.Batch l     -> let (modelEnd, iosEnd) = List.foldl (\io (modelAcc, ios) ->
+                                                                                        let (modelRet, cmd) = recur io modelAcc
+                                                                                        in (modelRet, cmd :: ios)
+                                                                                     ) (model2, []) l
+                                                 in (modelEnd, Cmd.batch iosEnd) 
+                            CmdMI.Command cmd -> (model2, cmd)
+    in recur
 
 
 {-| Transform a program using [IO](#IO) into a normal program.
 -}
 transform :
-    { y | init : ( model, IO model msg ), update : msg -> IO model msg }
-    -> { y | init : ( model, Cmd (IO model msg) ), update : IO model msg -> model -> ( model, Cmd (IO model msg) ) }
-transform args =
+    (msg -> IO model msg)
+    ->
+        { update : IO model msg -> model -> ( model, Cmd (IO model msg) )
+        , initTransformer : ( model, IO model msg ) -> ( model, Cmd (IO model msg) )
+        }
+transform update =
     let
-        update : IO model msg -> model -> ( model, Cmd (IO model msg) )
-        update =
-            runUpdate args.update
-
-        init : ( model, Cmd (IO model msg) )
-        init =
-            let
-                ( model0, io0 ) =
-                    args.init
-            in
-            update io0 model0
+        newUpdate =
+            runUpdate update
     in
-    { args | init = init, update = update }
-
-
-{-| Port of _Platform.program_ with [IO](#IO) with [dummyUpdate](#dummyUpdate).
--}
-beginnerProgram :
-    { init : model
-    , main : IO model msg
-    , subscriptions : model -> Sub (IO model msg)
+    { update = newUpdate
+    , initTransformer = \( m, io ) -> newUpdate io m
     }
-    -> Program Never model msg
-beginnerProgram args =
-    program { init = ( args.init, args.main ), update = dummyUpdate, subscriptions = args.subscriptions }
 
 
-{-| Port of _VirtualDom.program_ with [IO](#IO) with [dummyUpdate](#dummyUpdate) (also works with _Html_).
+{-| Transform an element program using [IO](#IO) into a normal element program.
 -}
-beginnerVDomProgram :
-    { init : model
-    , view : model -> Node (IO model msg)
-    , subscriptions : model -> Sub (IO model msg)
-    }
-    -> Program Never model msg
-beginnerVDomProgram args =
-    vDomProgram { init = ( args.init, none ), update = dummyUpdate, subscriptions = args.subscriptions, view = args.view }
-
-
-{-| Port of _Platform.program_ with [IO](#IO).
--}
-program :
-    { init : ( model, IO model msg )
+element :
+    { init : flags -> ( model, IO model msg )
+    , view : model -> Html (IO model msg)
     , update : msg -> IO model msg
     , subscriptions : model -> Sub (IO model msg)
     }
-    -> Program Never model msg
-program =
-    transform >> Platform.program
-
-
-{-| Port of _VirtualDom.program_ with [IO](#IO) (also works with _Html_).
--}
-vDomProgram :
-    { init : ( model, IO model msg )
-    , update : msg -> IO model msg
-    , subscriptions : model -> Sub (IO model msg)
-    , view : model -> Node (IO model msg)
-    }
-    -> Program Never model msg
-vDomProgram =
-    transform >> VirtualDom.program
-
-
-{-| Transform a program using [IO](#IO) into a normal program.
--}
-transformWithFlags :
-    { y | init : flags -> ( model, IO model msg ), update : msg -> IO model msg }
-    -> { y | init : flags -> ( model, Cmd (IO model msg) ), update : IO model msg -> model -> ( model, Cmd (IO model msg) ) }
-transformWithFlags args =
+    -> Program flags model msg
+element args =
     let
-        update : IO model msg -> model -> ( model, Cmd (IO model msg) )
-        update =
-            runUpdate args.update
-
-        init : flags -> ( model, Cmd (IO model msg) )
-        init flags =
-            let
-                ( model0, io0 ) =
-                    args.init flags
-            in
-            update io0 model0
+        new =
+            transform args.update
     in
-    { args | init = init, update = update }
+    Browser.element
+        { update = new.update
+        , init = args.init >> new.initTransformer
+        , view = args.view
+        , subscriptions = args.subscriptions
+        }
 
-
-{-| Port of _Platform.programWithFlags_ with [IO](#IO) with [dummyUpdate](#dummyUpdate).
+{-| Transform a sandbox program using [IO](#IO) into a normal sandbox program.
 -}
-beginnerProgramWithFlags :
-    { init : flags -> model
-    , main : IO model msg
-    , subscriptions : model -> Sub (IO model msg)
-    }
-    -> Program flags model msg
-beginnerProgramWithFlags args =
-    programWithFlags { init = \flags -> ( args.init flags, args.main ), update = dummyUpdate, subscriptions = args.subscriptions }
-
-
-{-| Port of _VirtualDom.programWithFlags_ with [IO](#IO) (also works with _Html_).
--}
-beginnerVDomProgramWithFlags :
-    { init : flags -> model
-    , view : model -> Node (IO model msg)
-    , subscriptions : model -> Sub (IO model msg)
-    }
-    -> Program flags model msg
-beginnerVDomProgramWithFlags args =
-    vDomProgramWithFlags { init = \flags -> ( args.init flags, none ), update = dummyUpdate, subscriptions = args.subscriptions, view = args.view }
-
-
-{-| Port of _Platform.programWithFlags_ with [IO](#IO).
--}
-programWithFlags :
+sandbox :
     { init : flags -> ( model, IO model msg )
+    , view : model -> Html (IO model msg)
+    , subscriptions : model -> Sub (IO model msg)
+    }
+    -> Program flags model msg
+sandbox args = element { init = args.init,
+                         view = args.view,
+                         update = dummyUpdate,
+                         subscriptions = args.subscriptions
+                       }
+
+{-| Transform a document program using [IO](#IO) into a normal document program.
+-}
+document :
+    { init : flags -> ( model, IO model msg )
+    , view : model -> Document (IO model msg)
     , update : msg -> IO model msg
     , subscriptions : model -> Sub (IO model msg)
     }
     -> Program flags model msg
-programWithFlags =
-    transformWithFlags >> Platform.programWithFlags
+document args =
+    let
+        new =
+            transform args.update
+    in
+    Browser.document
+        { update = new.update
+        , init = args.init >> new.initTransformer
+        , view = args.view
+        , subscriptions = args.subscriptions
+        }
 
 
-{-| Port of _VirtualDom.programWithFlags_ with [IO](#IO) (also works with _Html_).
+{-| Transform an application program using [IO](#IO) into a normal application program.
 -}
-vDomProgramWithFlags :
-    { init : flags -> ( model, IO model msg )
+application :
+    { init : flags -> Url -> Key -> ( model, IO model msg )
+    , view : model -> Document (IO model msg)
     , update : msg -> IO model msg
     , subscriptions : model -> Sub (IO model msg)
-    , view : model -> Node (IO model msg)
+    , onUrlRequest : UrlRequest -> IO model msg
+    , onUrlChange : Url -> IO model msg
     }
     -> Program flags model msg
-vDomProgramWithFlags =
-    transformWithFlags >> VirtualDom.programWithFlags
+application args =
+    let
+        new =
+            transform args.update
+    in
+    Browser.application
+        { update = new.update
+        , init = \f u k -> new.initTransformer (args.init f u k)
+        , view = args.view
+        , subscriptions = args.subscriptions
+        , onUrlRequest = args.onUrlRequest
+        , onUrlChange = args.onUrlChange
+        }

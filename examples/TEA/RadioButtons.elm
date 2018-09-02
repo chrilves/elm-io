@@ -8,12 +8,13 @@ import Html exposing (Html, Attribute, div, fieldset, input, label, text)
 import Html.Attributes exposing (name, style, type_)
 import Html.Events exposing (onClick)
 import Markdown
+import Browser
 
 
 {-|-}
-main: Program Never Model Msg
+main: Program () Model Msg
 main =
-  Html.beginnerProgram { model = chapter1, update = update, view = view }
+  Browser.sandbox { init = chapter1, update = update, view = view }
 
 
 
@@ -88,8 +89,7 @@ view model =
 radio : String -> msg -> Html msg
 radio value msg =
   label
-    [ style [("padding", "20px")]
-    ]
+    [style "padding" "20px"]
     [ input [ type_ "radio", name "font-size", onClick msg ] []
     , text value
     ]
@@ -97,16 +97,9 @@ radio value msg =
 
 sizeToStyle : FontSize -> Attribute msg
 sizeToStyle fontSize =
-  let
-    size =
-      case fontSize of
-        Small ->
-          "0.8em"
-
-        Medium ->
-          "1em"
-
-        Large ->
-          "1.2em"
-  in
-    style [("font-size", size)]
+  let size =
+        case fontSize of
+          Small  -> "0.8em"
+          Medium -> "1em"
+          Large  -> "1.2em"
+  in style "font-size" size

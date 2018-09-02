@@ -26,23 +26,6 @@ You have two options:
 - the [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM) approach lets you program the way you used to but lets you trigger commands in the view and chain commands as you like. The model is still updated in the update function, not in the view!
 - the [IO](http://package.elm-lang.org/packages/chrilves/elm-io/latest/IO) approach, in addition of the [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM)'s benefits, lets you read and write the state directly in commands. You can then alter the state directly from the view.
 
-## Installing version 2.0.0 beta
-
-Version 2.0.0 is still in beta but use it thanks to [elm-github-install](https://github.com/gdotdesign/elm-github-install). Adapt your `elm-package.json` with:
-
-```json
-{
-    "dependencies": {
-        "chrilves/elm-io": "2.0.0 <= v < 3.0.0"
-    },
-    "dependency-sources": {
-        "chrilves/elm-io": "git@github.com:chrilves/elm-io"
-    }
-}
-```
-
-Then run `elm-install`.
-
 ## The [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM) monad
 
 The [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM)
@@ -108,23 +91,19 @@ reset = IO.set 0
 view : Model -> Html (IO Model Msg) 
 view m = 
   div [] [
-    h1 [] [
-      text "Example of an IO program"
-    ],
-    p [] [
-      text ("Counter = " ++ (toString m))
-    ],
-    button [onClick increment] [
-      text "increment"
-    ],
-    button [onClick reset] [
-      text "reset"
-    ]
+    h1 [] [text "Example of an IO program"],
+    p [] [text ("Counter = " ++ (String.fromInt m))],
+    button [onClick increment] [text "increment"],
+    button [onClick reset] [text "reset"]
   ]
 
-main : IO.Program Never Model Msg 
+main : IO.Program () Model Msg 
 main =
-  IO.beginnerVDomProgram { init = 0, view = view , subscriptions = IO.dummySub }
+  IO.sandbox {
+    init = \_ -> (0, IO.none),
+    view = view ,
+    subscriptions = IO.dummySub
+  }
 ```
 
 Like [CmdM](http://package.elm-lang.org/packages/chrilves/elm-io/latest/CmdM), a program using
@@ -148,7 +127,9 @@ action =
     let
       -- The classic Http command
       httpCommand : Cmd (Result Error Model)
-      httpCommand = Http.send identity (Http.get "https://example.com/my/api/action" decoder)
+      httpCommand = Http.get { url = "https://example.com/my/api/action"
+                             , expect = Http.expectJson identity decoder
+                             }
     in
       -- First we lift the Cmd command into IO  
       -- then compose it by andThen with a function to deal with the response

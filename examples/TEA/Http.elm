@@ -12,22 +12,20 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Http
 import Json.Decode as Decode
+import Browser
 
 
 {-|-}
-main: Program Never Model Msg
+main: Program () Model Msg
 main =
-  Html.program
-    { init = init "cats"
+  Browser.element
+    { init = \_ -> init "cats"
     , view = view
     , update = update
     , subscriptions = subscriptions
     }
 
-
-
 -- MODEL
-
 
 type alias Model =
   { topic : String
@@ -96,8 +94,9 @@ getRandomGif topic =
   let
     url =
       "https://api.giphy.com/v1/gifs/random?api_key=dc6zaTOxFJmzC&tag=" ++ topic
-  in
-    Http.send NewGif (Http.get url decodeGifUrl)
+  in Http.get { url = url
+              , expect = Http.expectJson NewGif decodeGifUrl
+              }
 
 
 decodeGifUrl : Decode.Decoder String

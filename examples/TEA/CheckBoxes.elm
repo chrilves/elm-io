@@ -4,21 +4,18 @@ module TEA.CheckBoxes exposing (main)
 @docs main
 -}
 
-import Html exposing (Html, beginnerProgram, fieldset, input, label, text)
+import Html exposing (Html, fieldset, input, label, text)
 import Html.Attributes exposing (style, type_)
 import Html.Events exposing (onClick)
+import Browser
 
 
 {-|-}
-main: Program Never Model Msg
+main: Program () Model Msg
 main =
-  beginnerProgram { model = optOut, update = update, view = view }
-
-
+  Browser.sandbox { init = optOut, update = update, view = view }
 
 -- MODEL
-
-
 type alias Model =
   { notifications : Bool
   , autoplay : Bool
@@ -27,13 +24,9 @@ type alias Model =
 
 
 optOut : Model
-optOut =
-  Model True True True
-
-
+optOut = Model True True True
 
 -- UPDATE
-
 
 type Msg
   = ToggleNotifications
@@ -53,10 +46,7 @@ update msg model =
     ToggleLocation ->
       { model | location = not model.location }
 
-
-
 -- VIEW
-
 
 view : Model -> Html Msg
 view model =
@@ -66,12 +56,10 @@ view model =
     , checkbox ToggleLocation "Use Location"
     ]
 
-
 checkbox : msg -> String -> Html msg
 checkbox msg name =
   label
-    [ style [("padding", "20px")]
-    ]
+    [ style "padding" "20px"]
     [ input [ type_ "checkbox", onClick msg ] []
     , text name
     ]
