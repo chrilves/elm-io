@@ -1,12 +1,10 @@
-module IO.Internal exposing (Base, IO(..), baseMap)
+module IO.Internal exposing (Effect(..), IO(..), effectMap)
 
 import CmdM.Internal as CmdM
 
 type IO model a
     = Pure a
-    | Impure (Base model (IO model a))
-
-
+    | Impure (Effect model (IO model a))
 
 -- Utils
 {- This type is useful to *get* the model without having to pass
@@ -18,11 +16,15 @@ type IO model a
 -}
 
 
-type alias Base model a =
-    model -> (model, CmdM.Base a)
+type Effect model a = Get (model -> a)
+                    | Set model (() -> a)
+                    | Batch (List a)
+                    | Command (Cmd a)
 
-
-baseMap : (a -> b) -> Base model a -> Base model b
-baseMap f b m =
-    let (m2, b2) = b m
-    in (m2, CmdM.baseMap f b2)
+effectMap : (a -> b) -> Effect model a -> Effect model b
+effectMap f b =
+    case b of
+        Get k     -> Get (k >> f) 
+        Set m k   -> Set m (k >> f)
+        Batch l   -> Batch (List.map f l)
+        Command c -> Command (Cmd.map f c)

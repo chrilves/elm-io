@@ -3,9 +3,10 @@ module IO exposing
     , Program, sandbox, element, document, application
     , pure, lift, liftM, liftUpdate
     , get, set, modify
-    , map, andThen, join, ap, seq, traverse, mapM
-    , lens, optional, iso, prism
+    , map, andThen, join, ap, flap, compose, seq, traverse, mapM
+    , lens, optional, iso, prism, replace
     , none, dummyUpdate, dummySub
+    , yield, forceRendering
     , transform
     , batch, batchM
     )
@@ -41,18 +42,19 @@ This module port the two main ways of running an Elm application to [IO](#IO).
 
 # Classic monadic operations
 
-@docs map, andThen, join, ap, seq, traverse, mapM
-
+@docs map, andThen, join, ap, flap, compose, seq, traverse, mapM
 
 # Passing from a model to another via [optics](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest)
 
-@docs lens, optional, iso, prism
-
+@docs lens, optional, iso, prism, replace
 
 # Dummy values
 
 @docs none, dummyUpdate, dummySub
 
+# Forces Elm rendering
+
+@docs yield, forceRendering
 
 # Transform IO into regular Elm
 
@@ -71,7 +73,7 @@ messages and commands is **not defined**.
 import Browser exposing (..)
 import Browser.Navigation exposing (Key)
 import CmdM exposing (..)
-import CmdM.Internal as CmdMI
+import CmdM.Internal
 import Html exposing (..)
 import IO.Internal exposing (..)
 import Monocle.Iso exposing (..)
@@ -80,6 +82,8 @@ import Monocle.Optional exposing (..)
 import Monocle.Prism exposing (..)
 import Platform.Cmd exposing (..)
 import Url exposing (..)
+import Process
+import Task
 
 
 {-| Monadic interface for _The Elm Architecture_.
@@ -105,7 +109,24 @@ pure a =
 {-| Send messages in batch mode
 -}
 batch : List a -> IO model a
-batch l = Impure (\model -> (model, CmdMI.Batch (List.map Pure l)))
+batch l = Impure (Batch (List.map Pure l))
+
+{-| Lift a _Cmd_ as an [IO](#IO).
+-}
+lift : Cmd a -> IO model a
+lift cmd = Impure (Command (Cmd.map Pure cmd))
+
+{-| An [IO](#IO) that returns the current model.
+-}
+get : IO model model
+get = Impure (Get Pure)
+
+
+{-| An [IO](#IO) that sets the model.
+-}
+set : model -> IO model ()
+set s = Impure (Set s Pure)
+
 
 {-| Map a function over an [IO](#IO).
 
@@ -120,7 +141,7 @@ map f =
     let aux ioa =
             case ioa of
                 Pure a   -> Pure (f a)
-                Impure m -> Impure (baseMap aux m)
+                Impure m -> Impure (effectMap aux m)
     in aux
 
 
@@ -144,7 +165,7 @@ andThen f =
     let aux m =
             case m of
                 Pure a   -> f a
-                Impure x -> Impure (baseMap aux x)
+                Impure x -> Impure (effectMap aux x)
     in aux
 
 
@@ -171,11 +192,25 @@ It enable to easily lift functions to [IO](#IO).
 ap : IO model (a -> b) -> IO model a -> IO model b
 ap mf ma = andThen (\y -> map y ma) mf
 
+{-| Flipped version of ap. To be used like:
 
-{-| Run the first argument, ignore the result, then run the second.
+    pure f |> flap arg1 |> flap arg2 ...
 -}
-seq : IO model a -> IO model b -> IO model b
-seq = map (\_ -> identity) >> ap
+flap : IO model a -> IO model (a -> b) -> IO model b
+flap ma mf = ap mf ma
+
+{-| Composition of monadic functions
+-}
+compose : (b -> IO m c) -> (a -> IO m b) -> a -> IO m c
+compose g f a = f a |> andThen g
+
+{-| Run the second argument, ignore the result, then run the first one.
+    To be used in
+
+    first |> seq second
+-}
+seq : IO model b -> IO model a -> IO model b
+seq second first = first |> andThen (\_ -> second)
 
 -- Monoid
 
@@ -193,47 +228,32 @@ batchM l = join (batch l)
 
 -- Tansformer
 
-{-| Lift a _Cmd_ as an [IO](#IO).
--}
-lift : Cmd a -> IO model a
-lift cmd = Impure (\s -> (s, CmdMI.Command (Cmd.map Pure cmd)))
-
-
 {-| Lift a [CmdM](../CmdM) into an [IO](#IO)
 -}
 liftM : CmdM a -> IO model a
 liftM cmdm =
     case cmdm of
-        CmdMI.Pure a -> Pure a
-        CmdMI.Impure b -> Impure (\s -> (s, CmdMI.baseMap liftM b))
+        CmdM.Internal.Pure a   -> Pure a
+        CmdM.Internal.Impure imp -> Impure (
+                case imp of
+                    CmdM.Internal.Batch l   -> Batch (List.map liftM l)
+                    CmdM.Internal.Command c -> Command (Cmd.map liftM c)
+            )
 
 
 {-| Lift a classic update function into an [IO](#IO).
 -}
 liftUpdate : (model -> ( model, Cmd a )) -> IO model a
-liftUpdate f = Impure (\m -> let (m2, cmd) = f m
-                             in (m2, CmdMI.Command (Cmd.map Pure cmd))
-                      )
-
+liftUpdate f = Impure (Get (\m0 -> Impure (
+                let (m2, cmd) = f m0
+                in Set m2 (\() -> Impure (Command (Cmd.map Pure cmd)))
+               )))
 -- State
-
-
-{-| An [IO](#IO) that returns the current model.
--}
-get : IO model model
-get = Impure (\s -> (s, CmdMI.Batch [Pure s]))
-
-
-{-| An [IO](#IO) that sets the model.
--}
-set : model -> IO model ()
-set s = Impure (\_ -> (s, CmdMI.Batch [Pure ()]))
-
 
 {-| A [IO](#IO) that modify the model.
 -}
 modify : (model -> model) -> IO model ()
-modify f = Impure (\s -> (f s, CmdMI.Batch [Pure ()]))
+modify f = Impure (Get (\m -> Impure (Set (f m) Pure)))
 
 -- Optics
 
@@ -250,14 +270,16 @@ lift them to you real application's model when needed.
 -}
 lens : Lens b a -> IO a msg -> IO b msg
 lens ll =
-    let aux iob =
-            case iob of
-                Pure msg ->
-                    Pure msg
-
-                Impure base -> Impure (\b ->
-                    let (a, cmdmibase) = base (ll.get b)
-                    in (ll.set a b, CmdMI.baseMap aux cmdmibase))
+    let aux ioa =
+            case ioa of
+                Pure msg -> Pure msg
+                Impure x -> Impure (
+                  case x of
+                    Get f   -> Get (ll.get >> f >> aux)
+                    Set a f -> Get (\b -> Impure (Set (ll.set a b) (f >> aux)))
+                    Batch l -> Batch (List.map aux l)
+                    Command c -> Command (Cmd.map aux c)
+                  )
     in aux
 
 {-| Congruence by a [Optional](http://package.elm-lang.org/packages/arturopala/elm-monocle/latest/Monocle-Optional) on an [IO](#IO).
@@ -269,13 +291,16 @@ optional opt =
     let aux ioa =
             case ioa of
                 Pure msg -> Pure msg
-
-                Impure base -> Impure (\b ->
-                    case opt.getOption b of
-                        Nothing -> (b, CmdMI.Batch [])
-                        Just a  ->
-                            let (a2, cmdmibase) = base a
-                            in (opt.set a2 b, CmdMI.baseMap aux cmdmibase))
+                Impure x -> Impure (
+                  case x of
+                    Get f   -> Get (\b -> case opt.getOption b of
+                                            Nothing -> none
+                                            Just a  -> aux (f a)
+                                   )
+                    Set a f -> Get (\b -> Impure (Set (opt.set a b) (f >> aux)))
+                    Batch l -> Batch (List.map aux l)
+                    Command c -> Command (Cmd.map aux c)
+                  )
     in aux
 
 
@@ -287,9 +312,13 @@ iso liso =
     let aux iob =
             case iob of
                 Pure msg -> Pure msg
-                Impure x -> Impure (\b ->
-                    let (a, cmdmibase) = x (liso.get b)
-                    in (liso.reverseGet a, CmdMI.baseMap aux cmdmibase))
+                Impure x -> Impure (
+                    case x of
+                        Get f   -> Get (liso.get >> f >> aux)
+                        Set a f -> Set (liso.reverseGet a) (f >> aux)
+                        Batch l -> Batch (List.map aux l)
+                        Command c -> Command (Cmd.map aux c)
+                  )
     in aux
 
 
@@ -298,19 +327,35 @@ Just like lenses but with [Prism](http://package.elm-lang.org/packages/arturopal
 If the prism returns `Nothing`, then the [IO](#IO) does nothing.
 -}
 prism : Prism b a -> IO a msg -> IO b msg
-prism { getOption, reverseGet } =
+prism prsm =
     let aux ioa =
             case ioa of
                 Pure msg -> Pure msg
-
-                Impure base -> Impure (\b ->
-                    case getOption b of
-                        Nothing -> (b, CmdMI.Batch [])
-
-                        Just a -> let (a2, cmdmibase) = base a
-                                  in (reverseGet a2, CmdMI.baseMap aux cmdmibase))
+                Impure x -> Impure (
+                  case x of
+                    Get f   -> Get (\b -> case prsm.getOption b of
+                                            Nothing -> none
+                                            Just a  -> aux (f a)
+                                   )
+                    Set a f -> Set (prsm.reverseGet a) (f >> aux)
+                    Batch l -> Batch (List.map aux l)
+                    Command c -> Command (Cmd.map aux c)
+                  )
     in aux
 
+
+{-| Replace get and set by custom functions -}
+replace : IO b a -> (a -> IO b ()) -> IO a x -> IO b x
+replace rget rset =
+  let aux : IO a x -> IO b x
+      aux ioa =
+        case ioa of
+          Pure x -> Pure x
+          Impure (Get k)   -> rget |> andThen (k >> aux)
+          Impure (Set a k) -> rset a |> andThen (k >> aux)
+          Impure (Batch l) -> Impure (Batch (List.map aux l))
+          Impure (Command c) -> Impure (Command (Cmd.map aux c))
+  in aux              
 
 {-| You can think of traverse like a [map](#map) but with effects.
 It maps a function performing [IO](#IO) effects over a list.
@@ -341,6 +386,19 @@ dummyUpdate _ = none
 dummySub : a -> Sub b
 dummySub a = Sub.none
 
+{-| Identity function that forces Elm to render
+    the current state. Is equivalent to sleep for
+    0 milliseconds.
+-}
+yield : msg -> IO model msg
+yield msg = lift (Task.perform (\_ -> msg) (Process.sleep 0))
+
+{-| Forces Elm to render every set operation (model update).
+    This is MUCH SLOWER than normal set operations.
+-}
+forceRendering : IO a b -> IO a b
+forceRendering = replace get (set |> compose yield)
+
 -- Platform
 
 {-| Program using [IO](#IO).
@@ -352,20 +410,21 @@ type alias Program flags model msg =
 
 runUpdate : (msg -> IO model msg) -> IO model msg -> model -> ( model, Cmd (IO model msg) )
 runUpdate f =
-    let recur : IO model msg -> model -> (model, Cmd (IO model msg))
-        recur io1 model =
-            case io1 of
-                Pure msg    -> recur (f msg) model
-                Impure base ->
-                    let (model2, cmdmibase) = base model
-                    in  case cmdmibase of
-                            CmdMI.Batch l     -> let (modelEnd, iosEnd) = List.foldl (\io (modelAcc, ios) ->
-                                                                                        let (modelRet, cmd) = recur io modelAcc
-                                                                                        in (modelRet, cmd :: ios)
-                                                                                     ) (model2, []) l
-                                                 in (modelEnd, Cmd.batch iosEnd) 
-                            CmdMI.Command cmd -> (model2, cmd)
-    in recur
+  let recur : IO model msg -> model -> (model, Cmd (IO model msg))
+      recur io1 model =
+        case io1 of
+          Pure msg -> recur (f msg) model
+          Impure x ->
+            case x of
+              Get k   -> recur (k model) model
+              Set m k -> recur (k ())    m
+              Batch l -> let (m4, ios4) = List.foldl (\io (ma, ios) ->
+                                                        let (m3, cmd) = recur io ma
+                                                        in (m3, cmd :: ios)
+                                                     ) (model, []) l
+                         in (m4, Cmd.batch ios4)
+              Command cmd -> (model, cmd)
+  in recur
 
 
 {-| Transform a program using [IO](#IO) into a normal program.
@@ -377,14 +436,10 @@ transform :
         , initTransformer : ( model, IO model msg ) -> ( model, Cmd (IO model msg) )
         }
 transform update =
-    let
-        newUpdate =
-            runUpdate update
-    in
-    { update = newUpdate
-    , initTransformer = \( m, io ) -> newUpdate io m
-    }
-
+  let newUpdate = runUpdate update
+  in { update = newUpdate
+     , initTransformer = \( m, io ) -> newUpdate io m
+     }
 
 {-| Transform an element program using [IO](#IO) into a normal element program.
 -}
@@ -396,16 +451,13 @@ element :
     }
     -> Program flags model msg
 element args =
-    let
-        new =
-            transform args.update
-    in
-    Browser.element
-        { update = new.update
-        , init = args.init >> new.initTransformer
-        , view = args.view
-        , subscriptions = args.subscriptions
-        }
+  let new = transform args.update
+  in Browser.element
+       { update = new.update
+       , init = args.init >> new.initTransformer
+       , view = args.view
+       , subscriptions = args.subscriptions
+       }
 
 {-| Transform a sandbox program using [IO](#IO) into a normal sandbox program.
 -}
@@ -431,16 +483,13 @@ document :
     }
     -> Program flags model msg
 document args =
-    let
-        new =
-            transform args.update
-    in
-    Browser.document
-        { update = new.update
-        , init = args.init >> new.initTransformer
-        , view = args.view
-        , subscriptions = args.subscriptions
-        }
+  let new = transform args.update
+  in Browser.document
+       { update = new.update
+       , init = args.init >> new.initTransformer
+       , view = args.view
+       , subscriptions = args.subscriptions
+       }
 
 
 {-| Transform an application program using [IO](#IO) into a normal application program.
@@ -455,15 +504,12 @@ application :
     }
     -> Program flags model msg
 application args =
-    let
-        new =
-            transform args.update
-    in
-    Browser.application
-        { update = new.update
-        , init = \f u k -> new.initTransformer (args.init f u k)
-        , view = args.view
-        , subscriptions = args.subscriptions
-        , onUrlRequest = args.onUrlRequest
-        , onUrlChange = args.onUrlChange
-        }
+  let new = transform args.update
+  in Browser.application
+       { update = new.update
+       , init = \f u k -> new.initTransformer (args.init f u k)
+       , view = args.view
+       , subscriptions = args.subscriptions
+       , onUrlRequest = args.onUrlRequest
+       , onUrlChange = args.onUrlChange
+       }

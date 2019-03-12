@@ -2,7 +2,7 @@ module CmdM exposing
     ( CmdM
     , Program, element, document, application
     , pure, lift, none
-    , map, andThen, join, ap, seq, traverse, mapM
+    , map, andThen, join, ap, flap, compose, seq, traverse, mapM
     , transform
     , batch, batchM
     )
@@ -30,8 +30,7 @@ This module port the four main way of running an Elm application to [CmdM](#CmdM
 
 # Classic monadic operations
 
-@docs map, andThen, join, ap, seq, traverse, mapM
-
+@docs map, andThen, join, ap, flap, compose, seq, traverse, mapM
 
 # Transform CmdM into regular Elm
 
@@ -53,9 +52,6 @@ import CmdM.Internal exposing (..)
 import Html exposing (Html)
 import Platform.Cmd exposing (..)
 import Url exposing (..)
-import CmdM.Internal exposing (..)
-
-
 
 {-| Monadic interface for commands.
 
@@ -72,9 +68,7 @@ type alias CmdM msg =
 {-| Returns a [CmdM](#CmdM) whose only effect is containing the value given to [pure](#pure).
 -}
 pure : a -> CmdM a
-pure a =
-    Pure a
-
+pure a = Pure a
 
 {-| Send messages in batch
 -}
@@ -98,16 +92,11 @@ lift cmd = Impure (Command (Cmd.map Pure cmd))
 -}
 map : (a -> b) -> CmdM a -> CmdM b
 map f =
-    let
-        aux cmdm =
+    let aux cmdm =
             case cmdm of
-                Pure a ->
-                    Pure (f a)
-
-                Impure m ->
-                    Impure (baseMap aux m)
-    in
-    aux
+                Pure a   -> Pure (f a)
+                Impure m -> Impure (effectMap aux m)
+    in aux
 
 
 {-| Chains [CmdM](#CmdM)s.
@@ -127,16 +116,11 @@ the function.
 -}
 andThen : (a -> CmdM b) -> CmdM a -> CmdM b
 andThen f =
-    let
-        aux m =
+    let aux m =
             case m of
-                Pure a ->
-                    f a
-
-                Impure x ->
-                    Impure (baseMap aux x)
-    in
-    aux
+                Pure a   -> f a
+                Impure x -> Impure (effectMap aux x)
+    in aux
 
 
 {-| Flatten a [CmdM](#CmdM) containing a [CmdM](#CmdM) into a simple [CmdM](#CmdM).
@@ -161,12 +145,26 @@ It enable to easily lift functions to [CmdM](#CmdM).
 -}
 ap : CmdM (a -> b) -> CmdM a -> CmdM b
 ap mf ma = mf |> andThen (\f -> map f ma)
-            
-{-| Run the first argument, ignore the result, then run the second.
+
+{-| Flipped version of ap. To be used like:
+
+    pure f |> flap arg1 |> flap arg2 ...
 -}
-seq : CmdM a -> CmdM b -> CmdM b
-seq =
-    map (\_ -> identity) >> ap
+flap : CmdM a -> CmdM (a -> b) -> CmdM b
+flap ma mf = ap mf ma
+
+{-| Composition of monadic functions
+-}
+compose : (b -> CmdM c) -> (a -> CmdM b) -> a -> CmdM c
+compose g f a = f a |> andThen g
+
+{-| Run the second argument, ignore the result, then run the first one.
+    To be used in
+
+    first |> seq second
+-}
+seq : CmdM b -> CmdM a -> CmdM b
+seq second first = first |> andThen (\_ -> second)
 
 -- Monoid
 
@@ -182,40 +180,28 @@ Group commands in a batch. Its behavior may not be what you expect!
 batchM : List (CmdM a) -> CmdM a
 batchM l = join (batch l)
 
-
 {-| You can think of traverse like a [map](#map) but with effects.
 It maps a function performing [CmdM](#CmdM) effects over a list.
 -}
 traverse : (a -> CmdM b) -> List a -> CmdM (List b)
 traverse f l =
     case l of
-        [] ->
-            pure []
-
-        hd :: tl ->
-            ap (ap (pure (::)) (f hd)) (traverse f tl)
-
+        []       -> pure []
+        hd :: tl -> ap (ap (pure (::)) (f hd)) (traverse f tl)
 
 {-| Transform a list of [CmdM](#CmdM) into an [CmdM](#CmdM) of list.
 -}
 mapM : List (CmdM a) -> CmdM (List a)
-mapM =
-    traverse identity
-
-
+mapM = traverse identity
 
 -- Platform
-
 
 {-| Program using [CmdM](#CmdM).
 -}
 type alias Program flags model msg =
     Platform.Program flags model (CmdM msg)
 
-
-
 -- The core of all the [CmdM](#CmdM) monad! It runs the [CmdM](#CmdM) monad using the update function.
-
 
 runUpdate : (msg -> model -> ( model, CmdM msg )) -> CmdM msg -> model -> ( model, Cmd (CmdM msg) )
 runUpdate f =
