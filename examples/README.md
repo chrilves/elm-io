@@ -11,3 +11,13 @@ elm reactor
 ```
 
 and visit http://localhost:8000/
+
+# Running via Make
+
+Alternatively, you can compile the examples via make. From the [example](https://github.com/chrilves/elm-io/tree/master/examples) directory, just type:
+
+```sh
+make
+```
+
+and load the HTML files in a browser.

@@ -9,7 +9,7 @@ import IO exposing (..)
 type alias Msg = ()
 type alias Model = List String
 
-{- Prints one line of log with the provided color -}
+{- Add one string to the logs, 9 lines of lines at maximum (older removed) -}
 log : String -> IO Model Msg
 log txt = IO.modify (\l -> txt :: (List.take 9 l))
 
@@ -21,6 +21,7 @@ view m =
     ul [] (List.map (\txt -> li [] [text txt]) m)
   ]
 
+{- Recursive function logging indefinitely -}
 test : Int -> IO Model Msg
 test n = log (String.fromInt n)
          |> IO.andThen IO.yield
